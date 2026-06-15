@@ -1,0 +1,5 @@
+#REPLACE FILE2 SsoUserMapping
+#REPLACE SsoUserMapping.Recnum |FN2,0
+#REPLACE SsoUserMapping.ProviderId |FS2,1
+#REPLACE SsoUserMapping.Subject |FS2,2
+#REPLACE SsoUserMapping.UserLogin |FS2,3

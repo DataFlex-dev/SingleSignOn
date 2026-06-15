@@ -1,0 +1,519 @@
+﻿Use SSO\Sso.pkg
+Use WinUuid.pkg
+Use cCryptographerEx.pkg
+
+// ToDo: After getting the tokens from the token endpoint we should validate the nonce if it was passed in the original authorization request
+Class cSsoApi is a cObject
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        
+        Property Handle[] phoaProviders
+        Property Handle[] phoaStateObjects
+        
+        Property String psCallbackURLLogin
+        Property String psCallbackURLLogout
+        Property String psHomeURL
+    End_Procedure
+    
+    Procedure End_Construct_Object
+        Forward Send End_Construct_Object
+        
+        Move Self to ghoSso            
+    End_Procedure
+    
+    Procedure RegisterProvider Handle hoProvider
+        Integer i iArrSize
+        Handle[] hoaProviders
+
+        Get phoaProviders to hoaProviders
+        Move (SizeOfArray(hoaProviders)) to iArrSize
+
+        For i from 0 to (iArrSize - 1)
+            If (hoaProviders[i] = hoProvider) Procedure_Return
+        Loop
+
+        Move (hoProvider) to hoaProviders[iArrSize]
+
+        Set phoaProviders to hoaProviders
+    End_Procedure
+    
+    Procedure RegisterStateObject Handle hoStateObject
+        Integer iIndex iArrSize iIndexTo
+        Handle[] hoaStateObjects
+        String sNewState sState
+
+        Get psStateKey of hoStateObject to sNewState
+        Get phoaStateObjects to hoaStateObjects
+        
+        Move (SizeOfArray(hoaStateObjects)) to iArrSize
+        Move (iArrSize - 1) to iIndexTo
+
+        For iIndex from 0 to iIndexTo
+            If (hoaStateObjects[iIndex] = hoStateObject) Procedure_Return
+            Get psStateKey of hoaStateObjects[iIndex] to sState
+            If (sNewState = sState) Begin
+                Error DFERR_PROGRAM "Duplicate state keys during state object registration"
+                Procedure_Return
+            End
+        Loop
+
+        Move (hoStateObject) to hoaStateObjects[iArrSize]
+
+        Set phoaStateObjects to hoaStateObjects
+    End_Procedure
+    
+    {Visibility = Private}
+    Function ProviderByID String sProviderID Returns Handle
+        Integer i iArrSize
+        Handle[] hoaProviders
+        Handle hoProvider
+        String sID
+
+        Get phoaProviders to hoaProviders
+        Move (SizeOfArray(hoaProviders)) to iArrSize
+
+        For i from 0 to (iArrSize - 1)
+            Move (hoaProviders[i]) to hoProvider
+            Get psProviderID of hoProvider to sID
+
+            If (sProviderID = sID) Function_Return hoProvider
+        Loop
+
+        Function_Return 0
+    End_Function
+    
+    {Visibility = Private}
+    Function StateObjectByState String sState Returns Handle
+        Integer iIndex iArrSize iIndexTo
+        Handle[] hoaStateObjects
+        Handle hoStateObject
+        String sStateKey
+
+        Get phoaStateObjects to hoaStateObjects
+        Move (SizeOfArray(hoaStateObjects)) to iArrSize
+        Move (iArrSize - 1) to iIndexTo
+
+        For iIndex from 0 to iIndexTo
+            Move (hoaStateObjects[iIndex]) to hoStateObject
+            Get psStateKey of hoStateObject to sStateKey
+
+            If (sState = sStateKey) Function_Return hoStateObject
+        Loop
+
+        Function_Return 0
+    End_Function
+    
+    Procedure IdentityLogin Handle hoStateObject String sProviderID String sStateViewHash String sPrompt
+        String sAccessToken sRefreshToken sSessionKey sClientID sCallBackUrl sState
+	    Boolean bRetrieveToken bValid bSuccess
+	    tSsoUserInfo UserInfo
+	    Handle hoProvider
+	    tSsoTokenResponse TokenResponse
+	    tSsoIdentity tIdentity
+	    
+	    Move True to bRetrieveToken
+	    
+	    //  See if we already have a token (if not we need to redirect or retrieve one)
+	    Get GetAccessToken of hoStateObject sProviderID to sAccessToken
+        
+	    If (sAccessToken) Begin
+	        Get ValidateAccessToken sProviderID sAccessToken to bValid
+	        
+	        If (bValid) Begin
+	            Get GetSsoUserInfo sProviderID sAccessToken to UserInfo
+	            If (UserInfo.sSubject <> "") Begin
+	                Move False to bRetrieveToken
+	                
+	                Get ptIdentity of hoStateObject to tIdentity // Get data from the state object
+
+    	            // Tokens are still valid we need to fill the token response with our old data
+	                Move True to TokenResponse.bSuccess
+	                Move tIdentity.sProviderId      to TokenResponse.sProviderId
+	                Move tIdentity.sSubject         to TokenResponse.sSubject
+	                Move tIdentity.sIdToken         to TokenResponse.sIdToken
+	                Move tIdentity.sAccessToken     to TokenResponse.sAccessToken
+	                Move tIdentity.sRefreshToken    to TokenResponse.sRefreshToken
+	                Move tIdentity.sScope           to TokenResponse.sScope
+	                Move tIdentity.dtExpiresAt      to TokenResponse.dtExpiresAt
+
+    	            Get SsoLoginSuccess of hoStateObject TokenResponse to TokenResponse
+	            End
+	        End
+	    End
+	    
+	    If bRetrieveToken Begin
+	        Get ProviderById sProviderID to hoProvider
+	        
+	        If (hoProvider <> 0) Begin
+    	        // First check for a refresh token
+    	        Get GetRefreshToken of hoStateObject sProviderID to sRefreshToken
+    	        
+    	        If (sRefreshToken) Begin	            
+    	            Get ptIdentity of hoStateObject to tIdentity // Get data from the state object
+    	            // Request the same scopes as the ones we had
+    	            Get RefreshTokens sRefreshToken tIdentity.sScope to TokenResponse
+    	            
+    	            If (TokenResponse.bSuccess) Begin
+    	                Get SsoLoginSuccess of hoStateObject TokenResponse to TokenResponse
+    	                
+    	                If (TokenResponse.bSuccess) Begin
+    	                    Procedure_Return // After refresh we exit the procedure here, otherwise we continue to the provider
+    	                End
+  
+    	            End
+    	        End
+    	        
+	            // No refresh token or refresh failed = new login
+	            Get ClientID hoProvider to sClientID
+	            Get psCallbackURLLogin to sCallBackUrl
+                Get psStateKey of hoStateObject to sState	            
+                Move (sState + C_SSO_STATE_SEPARATOR + sProviderID) to sState
+                
+                // Add state view hash to return to (if an empty string is passed it will not be used)
+                Move (sState + C_SSO_STATE_SEPARATOR + sStateViewHash) to sState
+                
+	            Send SendSsoLoginRequest of hoProvider sClientID sCallBackUrl sState sPrompt
+            End
+	    End
+    End_Procedure
+    
+    // Attempts to log the user out at the SSO provider
+    Procedure IdentityLogout Handle hoStateObject String sProviderID String sStateParam
+        String sAccessToken sRefreshToken
+        
+        Get GetAccessToken of hoStateObject sProviderID to sAccessToken
+        Get GetRefreshToken of hoStateObject sProviderID to sRefreshToken
+        
+        If (sAccessToken <> '' and sRefreshToken <> '') Begin
+            Send SendSsoLogout hoStateObject sProviderID sStateParam
+        End
+    End_Procedure
+    
+    Function HandleCallback String sCode String sState Returns tSsoTokenResponse
+        Handle hoStateObject hoProvider
+        String sCodeVerifier sStateViewHash
+        tSsoTokenResponse tResponse
+        
+        Send ResolveState sState (&hoStateObject) (&hoProvider) (&sStateViewHash) (&sCodeVerifier)
+        
+        If (hoProvider <> 0) Begin
+            Get ExchangeAuthorizationCode of hoProvider sCode (psCallbackURLLogin(Self)) sCodeVerifier to tResponse
+        End
+        
+        // Add stateview hash to response struct
+        Move sStateViewHash to tResponse.sStateViewHash
+        
+        If (tResponse.bSuccess) Begin
+            // Event
+            Get SsoLoginSuccess of hoStateObject tResponse to tResponse
+        End
+        Else Begin
+            If (hoProvider = 0) Begin
+                Move "Couldn't parse provider from state" to tResponse.sError
+            End
+            
+            // Event
+            Get SsoLoginFailed of hoStateObject tResponse to tResponse
+        End
+        
+        Function_Return tResponse
+    End_Function
+    
+    { Visibility = Private }
+    Procedure SendSsoLogout Handle hoStateObject String sProviderID String sStateParam
+        Handle hoProvider
+        String sIdToken sRedirectUri
+        
+        Get ProviderById sProviderID to hoProvider
+        
+        If (hoProvider = 0 or hoStateObject = 0) Procedure_Return
+        
+        Get GetIdToken of hoStateObject sProviderID to sIdToken
+            
+        Get psCallbackURLLogout to sRedirectUri
+        
+        If (SizeOfString(sStateParam) > 0) Begin
+            If (Pos("?", sRedirectUri) = 0) Begin
+                Move (sRedirectUri + "?") to sRedirectUri
+            End
+            Else Begin
+                Move (sRedirectUri + "&") to sRedirectUri
+            End
+            
+            // Paste stateview hash parameter behind it
+            Move (sRedirectUri + C_SSO_LOGOUT_RETURN_PARAMETER + "=" + UrlEncode(sStateParam, True)) to sRedirectUri
+        End
+        
+        Send SendSsoLogoutRequest of hoProvider sIdToken sRedirectUri
+    End_Procedure
+    
+    Function RevokeTokens String sProviderID String sAccessToken String sRefreshToken Returns Boolean
+        Handle hoProvider
+        Boolean bSuccess
+        
+        Get ProviderById sProviderID to hoProvider
+        
+        If (hoProvider <> 0) Begin
+            Get RevokeAccessToken of hoProvider sAccessToken to bSuccess
+            If (bSuccess) ;
+                Get RevokeRefreshToken of hoProvider sRefreshToken to bSuccess
+        End
+        
+        Function_Return bSuccess
+    End_Function
+   
+    Function ValidateAccessToken String sProvider String sAccessToken Returns Boolean
+        Handle hoProvider
+        Boolean bValid
+
+        Get ProviderById sProvider to hoProvider
+        If (hoProvider <> 0) Begin
+            Get ValidateAccessToken of hoProvider sAccessToken to bValid
+        End
+        
+        Function_Return bValid
+    End_Function
+    
+    Function RefreshTokens String sProvider String sRefreshToken String sScope Returns tSsoTokenResponse
+        Handle hoProvider
+        tSsoTokenResponse stTokenResponse
+        
+        Get ProviderById sProvider to hoProvider
+        
+        If (hoProvider <> 0) Begin
+            Get RefreshTokens of hoProvider sRefreshToken sScope to stTokenResponse
+        End
+        
+        Function_Return stTokenResponse
+    End_Function
+
+    Function IntrospectToken String sProvider String sToken String sOptTokenTypeHint Returns tSsoIntrospectResult
+        Handle hoProvider
+        tSsoIntrospectResult stResult
+
+        Get ProviderById sProvider to hoProvider
+
+        If (hoProvider <> 0) Begin
+            If (num_arguments > 2) ;
+                Get IntrospectToken of hoProvider sToken sOptTokenTypeHint to stResult
+            Else ;
+                Get IntrospectToken of hoProvider sToken to stResult
+        End
+
+        Function_Return stResult
+    End_Function
+    
+    Function GetSsoUserInfo String sProvider String sAccessToken Returns tSsoUserInfo
+        Handle hoProvider
+        tSsoUserInfo UserInfo
+        
+        Get ProviderById sProvider to hoProvider
+        
+        If (hoProvider <> 0) Begin
+            Get GetSsoUserInfo of hoProvider sAccessToken to UserInfo
+        End
+        
+        Function_Return UserInfo
+    End_Function
+    
+    // Propagation functions
+    Function HomeUrl Handle hoProvider Returns String
+        String sUrl sProviderID
+        
+        If (hoProvider <> 0) Begin
+            Get psHomeURL to sUrl
+            Get psProviderID of hoProvider to sProviderID
+            Send OnGetHomeURL sProviderID (&sUrl)
+        End
+        
+        Function_Return sUrl
+    End_Function
+    
+    Function ClientID Handle hoProvider Returns String
+        String sClientID sProviderID
+        
+        If (hoProvider <> 0) Begin
+            Get psIdentityClientID of hoProvider to sClientID
+            Get psProviderID of hoProvider to sProviderID
+            Send OnGetSsoClientID sProviderID (&sClientID)
+        End
+        
+        Function_Return sClientID
+    End_Function
+    
+    // Public events
+    {MethodType = Event}
+    Procedure OnGetHomeURL String sProviderID String ByRef sUrl
+        // Augment this event to modify the home url or get it from a different source (e.g. database)
+    End_Procedure
+    
+    {MethodType = Event}
+    Procedure OnGetSsoClientID String sProviderID String ByRef sClientID
+        // Augment this event to modify the clientID or get it from a different source (e.g. database)
+    End_Procedure
+    
+    // Helper functions
+    // Reads a field value from tSsoUserInfo.aFields
+    Function SsoUserInfoFieldValue tSsoUserInfo UserInfo String sKey Returns String
+        tNvPair oNv
+        Integer iSearchIndex
+        String sValue
+        
+        Move sKey to oNv.sName
+        Move (SearchArray(oNv, UserInfo.aFields)) to iSearchIndex
+        
+        If (iSearchIndex <> -1) Begin
+            Move UserInfo.aFields[iSearchIndex].sValue to sValue    
+        End
+        
+        Function_Return sValue
+    End_Function
+    
+    // Adds (or overwrites) a field value into tSsoUserInfo.aFields
+    Function AddUserInfoField tSsoUserInfo UserInfo String sKey String sValue Returns tSsoUserInfo
+        tNvPair oNv
+        Integer iSearchIndex
+        
+        Move sKey to oNv.sName
+        Move sValue to oNv.sValue
+        
+        Move (SearchArray(oNv, UserInfo.aFields)) to iSearchIndex
+        If (iSearchIndex = -1) Begin
+            // Add to the end
+            Move (InsertInArray(UserInfo.aFields, SizeOfArray(UserInfo.aFields), oNv)) to UserInfo.aFields
+        End
+        Else Begin
+            // Overwrite
+            Move oNv to UserInfo.aFields[iSearchIndex]
+        End
+        
+        Function_Return UserInfo
+    End_Function
+    
+    // Helper function to help resolve the state parameter
+    // state structure: 'psStateKey(hoStateObject)|@|ProviderId(hoProvider)|@|StateViewHash(optional, empty if not passed)|@|CodeChallengeMethod|@|EncryptedCodeVerifier(code challenge only used for public clients)'
+    { Visibility=Private }
+    Procedure ResolveState String sState Handle ByRef hoStateObject Handle ByRef hoProvider String ByRef sStateViewHash String ByRef sCodeVerifier
+        String[] asParts
+        Integer iArrSize
+        
+        Get g_Base64UrlDecodeStr sState to sState
+        Move (StrSplitToArray(sState, C_SSO_STATE_SEPARATOR)) to asParts
+        Move (SizeOfArray(asParts)) to iArrSize
+        If (iArrSize > 0) Begin
+            // first index will be the psStateKey of the state object
+            Get StateObjectByState asParts[0] to hoStateObject
+        End
+        
+        If (iArrSize > 1) Begin
+            // second index will be the providerId
+            Get ProviderById asParts[1] to hoProvider
+        End
+        
+        If (iArrSize > 2) Begin
+            Move asParts[2] to sStateViewHash
+        End
+        
+        If (iArrSize > 3) Begin
+            // third index will be the encrypted code verifier (mandatory for public clients)
+            Get DecryptCodeVerifier asParts[3] to sCodeVerifier
+        End
+    End_Procedure
+    // Generate an encrypted code verifier for in the state parameter the code_challenge gets passed back as ByRef parameter
+    // sMethod can be "none" or "S256" ("none" should actually never be used)
+    Function EncryptedCodeVerifier String sMethod String ByRef sCodeChallenge String ByRef sFinalMethod Returns String
+        String sCodeVerifier sEncrypted
+        Handle hoCrypto
+        UChar[] ucaRandom ucaHash ucaEncrypted
+        
+        Get Create (RefClass(cCryptoGrapherEx)) to hoCrypto
+        
+        Get GenerateRandom of hoCrypto 32 to ucaRandom
+        Move (UCharArrayToString(ucaRandom, SizeOfArray(ucaRandom))) to sCodeVerifier
+        Get g_Base64UrlEncodeStr sCodeVerifier to sCodeVerifier
+        
+        // Sha256/none
+        If (sMethod = C_SSO_CODE_VERIFIER_METHOD_S256) Begin
+            Move C_SSO_CODE_VERIFIER_METHOD_S256 to sFinalMethod
+            Get CreateSha256Hash sCodeVerifier to sCodeChallenge
+            Move (g_Base64UrlEncodeStr(sCodeChallenge)) to sCodeChallenge
+        End
+        Else Begin
+            // Fallback to none
+            Move "none" to sFinalMethod
+            Move sCodeVerifier to sCodeChallenge
+        End
+         
+        // Encrypt for return
+        Get Encrypt of hoCrypto (StringToUCharArray("some_password")) (StringToUCharArray(sCodeVerifier)) to ucaEncrypted
+        Move (UCharArrayToString(ucaEncrypted, SizeOfArray(ucaEncrypted))) to sEncrypted
+        
+        Function_Return sEncrypted
+    End_Function
+    
+    Function DecryptCodeVerifier String sEncryptedCodeVerifier Returns String
+        Handle hoCrypto
+        UChar[] ucaDecrypted
+        String sDecrypted
+        
+        Get Create (RefClass(cCryptoGrapherEx)) to hoCrypto
+        Get Decrypt of hoCrypto (StringToUCharArray("some_password")) (StringToUCharArray(sEncryptedCodeVerifier)) to ucaDecrypted
+        Send Destroy of hoCrypto
+        Move (UCharArrayToString(ucaDecrypted, SizeOfArray(ucaDecrypted))) to sDecrypted
+        
+        Function_Return sDecrypted
+    End_Function
+    
+    { Visibility=Private }
+    Function CreateSha256Hash String sValue Returns String
+        Handle hoCrypto hProv hHash
+        UChar[] ucData ucHash
+        String sResult sError
+        Integer iRetVal iErr
+        
+        Get Create (RefClass(cCryptographerEx)) to hoCrypto
+        Set psProvider of hoCrypto to ""    //  Not providing a specific provider gives the default provider for the provider type
+        Set piProvider of hoCrypto to PROV_RSA_AES
+        Set piHash of hoCrypto to CALG_SHA_256
+        
+        Get AcquireContext of hoCrypto to hProv
+        
+        If (hProv) Begin
+            Get CreateHash of hoCrypto hProv to hHash
+            If (hHash <> 0) Begin
+                Move (StringToUCharArray(sValue)) to ucData
+                Get HashData of hoCrypto hHash ucData to iRetVal
+                Get HashValue of hoCrypto hHash to ucHash
+                Move (UCharArrayToString(ucHash, SizeOfArray(ucHash))) to sResult
+            End
+        End
+        
+        Function_Return sResult
+    End_Function
+    
+    { Visibility=Private }
+    Function CharToHex Integer iChar Returns String
+        String sHex
+        
+        Move (Uppercase(iChar)) to iChar
+        
+        Move (Mid("0123456789abcdef",1,Integer(iChar/16+1))) to sHex
+        
+        Move (sHex-Mid("0123456789abcdef",1,Mod(iChar,16)+1)) to sHex
+        
+        Function_Return sHex
+    End_Function
+    
+    { Visibility=Private }    
+    Function UCharArrayToHex Global UChar[] ucHash Returns String
+        Integer iCounter
+        String sHex sChar
+        For iCounter from 1 to (SizeOfArray(ucHash))
+            Get CharToHex ucHash[iCounter-1] to sChar
+            
+            Move (sHex+sChar) to sHex
+        Loop
+        Function_Return sHex
+    End_Function
+End_Class

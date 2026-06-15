@@ -1,0 +1,21 @@
+﻿Struct stJWKSKey
+    { Name = "kty" }
+    String sKTY
+    { Name = "use" }
+    String sUSE
+    { Name = "kid" }
+    String sKID
+    { Name = "x5t" }
+    String sX5T
+    { Name = "n" }
+    String sN
+    { Name = "e" }
+    String sE
+    { Name = "x5c" }
+    String[] sX5C
+End_Struct
+
+Struct stJWKSKeys
+    { Name = "keys" }
+    stJWKSKey[] stJWKSKeys
+End_Struct

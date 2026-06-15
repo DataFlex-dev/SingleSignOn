@@ -1,0 +1,149 @@
+﻿Use SSO\Sso.pkg
+
+// Note that all the functions have their visibility set to private, this is because those functions should be called through the API and not directly on the provider object
+Class cSsoProvider is a cObject
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        
+        Property String     psProviderID
+        Property Boolean    pbPublicClient
+        Property String     psIdentityClientID
+        Property String     psIdentityClientSecret
+    End_Procedure
+    
+    // Used to send the login request to the provider. Usually redirects the user to the SSO Service login page
+    { Visibility=Private }
+    Procedure SendSsoLoginRequest String sClientID String sCallBackUrl String sState String sPrompt
+        Error DFERR_PROGRAM "This method (cSsoProvider.SendSsoLoginRequest) must be overridden. An empty implementation is allowed."
+    End_Procedure
+    
+    // Used to send the logout request to the provider. Usually redirects the user to the SSO Service logout page.
+    { Visibility=Private }
+    Procedure SendSsoLogoutRequest String sIdToken String sRedirectUri
+        Error DFERR_PROGRAM "This method (cSsoProvider.SendSsoLogoutRequest) must be overridden. An empty implementation is allowed."
+    End_Procedure
+    
+    // Used to acquire the info for a user based on the accesstoken. This is later used to identify the user locally, or perform a local login in the application (custom implementation)
+    { Visibility=Private }
+    Function GetSsoUserInfo String sAccessToken Returns tSsoUserInfo
+        Error DFERR_PROGRAM "This method (cSsoProvider.GetSsoUserInfo) must be overridden. An empty implementation is allowed."
+    End_Function
+    
+    // Revokes the access token for this application
+    { Visibility=Private }
+    Function RevokeAccessToken String sAccessToken Returns Boolean
+        Error DFERR_PROGRAM "This method (cSsoProvider.RevokeAccessToken) must be overridden. An empty implementation is allowed."
+    End_Function
+    
+    // Used to validate an existing access token with the SSO Service
+    { Visibility=Private }
+    Procedure ValidateAccessToken String sAccessToken Boolean ByRef bValid
+        Error DFERR_PROGRAM "This method (cSsoProvider.ValidateAccessToken) must be overridden. An empty implementation is allowed."
+    End_Procedure
+
+    { Visibility=Private }
+    Function IntrospectToken String sToken String sOptTokenTypeHint Returns tSsoIntrospectResult
+        tSsoIntrospectResult stResult
+        Error DFERR_PROGRAM "This method (cSsoProvider.IntrospectToken) must be overridden. An empty implementation is allowed."
+        Function_Return stResult
+    End_Function
+    
+    { Visibility=Private }
+    Function ExchangeAuthorizationCode String sCode String sRedirectUri String sCodeVerifier Returns tSsoTokenResponse
+        Error DFERR_PROGRAM "This method (cSsoProvider.ExchangeAuthorizationCode) must be overridden. An empty implementation is allowed."
+    End_Function
+    
+    { Visibility=Private }
+    Function RsaPublicPemFromModulusExponent UChar[] ucaN UChar[] ucaE Returns String
+        Pointer pBNN pBNE       // BIGNUMs for modulus and exponent
+        Pointer pRSA            // RSA*
+        Pointer pKey            // EVP_PKEY*
+        Pointer pBIO            // BIO memory buffer
+        Integer iPending iRead
+        Pointer pBuf
+        String sPem
+        
+        // 1. Convert N and E to BIGNUMs
+        Move (OpenSSL_BN_bin2bn(AddressOf(ucaN), SizeOfArray(ucaN), 0)) to pBNN
+        Move (OpenSSL_BN_bin2bn(AddressOf(ucaE), SizeOfArray(ucaE), 0)) to pBNE
+        
+        If (pBNN = 0 or pBNE = 0) Begin
+            If (pBNN <> 0) Move (OpenSSL_BN_free(pBNN)) to gVoid
+            If (pBNE <> 0) Move (OpenSSL_BN_free(pBNE)) to gVoid
+            Error DFERR_PROGRAM "OpenSSL Error: Failed to convert N/E to BIGNUM"
+            Function_Return ""
+        End
+        
+        // 2. Allocate RSA
+        Move (OpenSSL_RSA_new()) to pRSA
+        If (pRSA = 0) Begin
+            Move (OpenSSL_BN_free(pBNN)) to gVoid
+            Move (OpenSSL_BN_free(pBNE)) to gVoid
+            Error DFERR_PROGRAM "OpenSSL Error: Failed to allocate RSA"
+            Function_Return ""
+        End
+        
+        // 3. Set RSA modulus and exponent
+        Move (OpenSSL_RSA_set0_key(pRSA, pBNN, pBNE, 0)) to iRead
+        If (iRead <= 0) Begin
+            Move (OpenSSL_RSA_free(pRSA)) to gVoid
+            Move (OpenSSL_EVP_PKEY_free(pKey)) to gVoid
+            Move (OpenSSL_BN_free(pBNN)) to gVoid
+            Move (OpenSSL_BN_free(pBNE)) to gVoid
+            Error DFERR_PROGRAM "OpenSSL Error: Failed to set N/E to RSA"
+            Function_Return ""
+        End
+        // At this point, RSA owns pBNN and pBNE (means that they will get cleaned up once we clean up pRSA)
+        
+        // 4. Allocate EVP_PKEY and assign RSA
+        Move (OpenSSL_EVP_PKEY_new()) to pKey
+        If (pKey = 0) Begin
+            Move (OpenSSL_RSA_free(pRSA)) to gVoid
+            Error DFERR_PROGRAM "OpenSSL Error: Failed to allocate EVP_PKEY"
+            Function_Return ""
+        End
+    
+        // Modern assignment: EVP_PKEY_set1_RSA increments RSA ref count
+        Move (OpenSSL_EVP_PKEY_set1_RSA(pKey, pRSA)) to iRead
+        If (iRead <= 0) Begin
+            Move (OpenSSL_RSA_free(pRSA)) to gVoid
+            Move (OpenSSL_EVP_PKEY_free(pKey)) to gVoid
+            Error DFERR_PROGRAM "OpenSSL Error: EVP_PKEY_set1_RSA failed"
+            Function_Return ""
+        End
+        
+        // 5. Create memory BIO
+        Move (OpenSSL_BIO_new(OpenSSL_BIO_s_mem())) to pBIO
+        If (pBIO = 0) Begin
+            Move (OpenSSL_EVP_PKEY_free(pKey)) to gVoid
+            Move (OpenSSL_RSA_free(pRSA)) to gVoid
+            Error DFERR_PROGRAM "OpenSSL Error: Failed to create memory BIO"
+            Function_Return ""
+        End
+        
+        // 6. Write public key PEM to BIO
+        Move (OpenSSL_PEM_write_bio_PUBKEY(pBIO, pKey)) to iRead
+        If (iRead <= 0) Begin
+            Move (OpenSSL_BIO_free(pBIO)) to gVoid
+            Move (OpenSSL_EVP_PKEY_free(pKey)) to gVoid
+            Move (OpenSSL_RSA_free(pRSA)) to gVoid
+            Error DFERR_PROGRAM "OpenSSL Error: Failed to write public key PEM"
+            Function_Return ""
+        End
+        
+        // 7. Read PEM from BIO
+        Move (OpenSSL_BIO_ctrl_pending(pBIO)) to iPending
+        Move (Alloc(iPending + 1)) to pBuf
+        Move (OpenSSL_BIO_read(pBIO, pBuf, iPending)) to iRead
+        Move (PointerToString(pBuf)) to sPem
+        
+        // 8. Cleanup
+        Move (Free(pBuf)) to gVoid
+        Move (OpenSSL_BIO_free(pBIO)) to gVoid
+        Move (OpenSSL_EVP_PKEY_free(pKey)) to gVoid
+        Move (OpenSSL_RSA_free(pRSA)) to gVoid
+        
+        Function_Return sPem
+    End_Function
+End_Class

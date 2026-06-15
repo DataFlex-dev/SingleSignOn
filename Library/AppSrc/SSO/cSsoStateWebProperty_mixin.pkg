@@ -1,0 +1,174 @@
+Use VdfBase.pkg
+Use SSO\Sso.pkg
+
+Class cSsoStateWebProperty_mixin is a Mixin
+    Procedure Define_cSsoStateWebProperty_mixin
+        // In Web, these are synchronized via the client's session
+        { Visibility=Private }
+        { WebProperty=Server }
+        Property tSsoIdentity ptIdentity
+        
+        Send Define_cSsoStateBase_mixin
+    End_Procedure
+    
+    Import_Class_Protocol cSsoStateBase_mixin
+    
+    Procedure End_Construct_cSsoStateWebProperty_mixin
+        Send End_Construct_cSsoStateBase_mixin
+    End_Procedure
+    
+    Function CurrentProviderId Returns String
+        tSsoIdentity tIdentity
+        
+        WebGet ptIdentity to tIdentity
+        
+        Function_Return tIdentity.sProviderId
+    End_Function
+    
+    Procedure IdentityLogout Boolean bOptReturnToStateViewHash
+        Handle hoApi
+        tSsoIdentity tIdentity
+        Boolean bOk bReturnToStateViewHash
+        String sStateHash
+        
+        If (num_arguments > 0) Begin
+            Move bOptReturnToStateViewHash to bReturnToStateViewHash
+        End
+        
+        Get ApiHandle to hoApi
+        
+        WebGet ptIdentity to tIdentity
+        
+        If (hoApi <> 0) Begin
+            If (bReturnToStateViewHash) Begin
+                #IFDEF Is$WebApp
+                    Get StateHash of ghoWebApp to sStateHash
+                #ENDIF
+            End
+            
+            Send IdentityLogout of hoApi Self tIdentity.sProviderId sStateHash
+        End
+
+        Send SsoClearIdentity
+        Send OnSsoSaveState
+        Send OnSsoLogoutSuccess
+    End_Procedure
+
+    Function SsoActiveIdentity tSsoIdentity ByRef tIdentity Returns Boolean
+        If (SsoIsLoggedIn(Self)) Begin
+            WebGet ptIdentity to tIdentity
+            Function_Return True
+        End
+        
+        Function_Return False
+    End_Function
+    
+    Function GetIdToken String sProviderId Returns String
+        tSsoIdentity tIdentity
+        
+        WebGet ptIdentity to tIdentity
+        
+        If (tIdentity.sProviderId = sProviderId) ;
+            Function_Return tIdentity.sIdToken
+        Else ;
+            Function_Return ""
+    End_Function
+    
+    Function GetAccessToken String sProviderId Returns String
+        tSsoIdentity tIdentity
+        
+        WebGet ptIdentity to tIdentity
+        
+        If (tIdentity.sProviderId = sProviderId) ;
+            Function_Return tIdentity.sAccessToken
+        Else ;
+            Function_Return ""
+    End_Function
+    
+    Function GetRefreshToken String sProviderId Returns String
+        tSsoIdentity tIdentity
+        
+        WebGet ptIdentity to tIdentity
+        
+        If (tIdentity.sProviderId = sProviderId) ;
+            Function_Return tIdentity.sRefreshToken
+        Else ;
+            Function_Return ""
+    End_Function
+    
+    Function ValidateAccessToken Returns Boolean
+        tSsoIdentity tIdentity
+        Handle hoApi
+        Boolean bSuccess
+        
+        Get ApiHandle to hoApi
+        WebGet ptIdentity to tIdentity
+        
+        If (hoApi <> 0) Begin
+            Get ValidateAccessToken of hoApi tIdentity.sProviderId tIdentity.sAccessToken to bSuccess
+        End
+        
+        Function_Return bSuccess
+    End_Function
+    
+    Function RefreshTokens Returns tSsoTokenResponse
+        Handle hoApi
+        tSsoTokenResponse TokenResponse
+        tSsoIdentity tIdentity
+        
+        Get ApiHandle to hoApi
+        If (hoApi <> 0) Begin
+            WebGet ptIdentity to tIdentity
+            Get RefreshTokens of hoApi tIdentity.sProviderId tIdentity.sRefreshToken tIdentity.sScope to TokenResponse
+            
+            If (TokenResponse.bSuccess) Begin
+                // Set the new tokens as identity
+                Move TokenResponse.sProviderId      to tIdentity.sProviderId
+                Move TokenResponse.sAccessToken     to tIdentity.sAccessToken
+                Move TokenResponse.dtExpiresAt      to tIdentity.dtExpiresAt
+                Move TokenResponse.sIdToken         to tIdentity.sIdToken
+                Move TokenResponse.sRefreshToken    to tIdentity.sRefreshToken
+                Move TokenResponse.sScope           to tIdentity.sScope
+                Move TokenResponse.sSubject         to tIdentity.sSubject
+                
+                WebSet ptIdentity to tIdentity
+                Send OnSsoSaveState
+            End
+        End
+        
+        Function_Return TokenResponse
+    End_Function
+    
+    // For the webproperty variant this event should be sent forward, any additional logic can be done before or after the forward send
+    { MethodType=Event }
+    Function SsoLoginSuccess tSsoTokenResponse tResponse Returns tSsoTokenResponse
+        tSsoIdentity tIdentity
+        
+        Move tResponse.sProviderId      to tIdentity.sProviderId
+        Move tResponse.sIdToken         to tIdentity.sIdToken
+        Move tResponse.sAccessToken     to tIdentity.sAccessToken
+        Move tResponse.sRefreshToken    to tIdentity.sRefreshToken
+        Move tResponse.dtExpiresAt      to tIdentity.dtExpiresAt
+        Move tResponse.sScope           to tIdentity.sScope
+        Move tResponse.sSubject         to tIdentity.sSubject
+        WebSet ptIdentity to tIdentity
+        
+        Function_Return tResponse // By default webset the identity prop and return the token response for possible further processing
+    End_Function
+
+    { MethodType=Event }
+    Function SsoLoginFailed tSsoTokenResponse tResponse Returns tSsoTokenResponse
+        Function_Return tResponse // By default do nothing and return the struct
+    End_Function
+
+    { MethodType=Event }
+    Procedure OnSsoLogoutSuccess
+    End_Procedure
+
+    { Visibility=Private }
+    Procedure SsoClearIdentity
+        tSsoIdentity tEmpty
+
+        WebSet ptIdentity to tEmpty
+    End_Procedure
+End_Class

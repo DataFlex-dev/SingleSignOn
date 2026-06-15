@@ -1,0 +1,142 @@
+Use VdfBase.pkg
+Use SSO\Sso.pkg
+
+Class cSsoStateBase_mixin is a Mixin
+    Procedure Define_cSsoStateBase_mixin
+        Property Handle phoSsoApi 0
+        Property String psStateKey ""
+    End_Procedure
+    
+    Procedure End_Construct_cSsoStateBase_mixin
+        Handle hoApi
+        
+        // Register at the SSO API
+        Get phoSsoApi to hoApi
+        If (hoApi = 0) Begin
+            Move ghoSso to hoApi
+            Set phoSsoApi to hoApi
+        End
+        
+        If (hoApi <> 0) Begin
+            Send RegisterStateObject of hoApi Self
+        End
+    End_Procedure
+    
+    { Visibility=Private }
+    Function ApiHandle Returns Handle
+        Handle hoApi
+        
+        Get phoSsoApi to hoApi
+        If (hoApi = 0) Begin
+            Error DFERR_SETUP (SFormat("phoSsoApi not set for state object %1", Name(Self)))
+        End
+        
+        Function_Return hoApi
+    End_Function
+    
+    Procedure IdentityLogin String sProviderId Boolean bOptReturnToStateViewHash String sOptPrompt
+        Handle hoApi
+        Boolean bReturnToStateViewHash
+        String sPrompt sStateViewHash
+        
+        Get ApiHandle to hoApi
+        
+        If (hoApi <> 0) Begin
+            If (num_arguments > 1) Begin
+                Move bOptReturnToStateViewHash to bReturnToStateViewHash
+            End
+            
+            If (bReturnToStateViewHash) Begin
+                #IFDEF Is$WebApp
+                    // Get state view hash of WebApp
+                    Get StateHash of ghoWebApp to sStateViewHash
+                #ENDIF
+            End
+            
+            If (num_arguments > 2) Begin
+                Move sOptPrompt to sPrompt
+            End
+            
+            // Forward to API
+            Send IdentityLogin of hoApi Self sProviderId sStateViewHash sPrompt
+        End
+
+    End_Procedure
+
+    Procedure IdentityLogout
+        Error DFERR_PROGRAM "cSsoStateBase_Mixin.IdentityLogout should be implemented."
+    End_Procedure
+
+    Function SsoIsLoggedIn Returns Boolean
+        Boolean bOk
+        tSsoTokenResponse TokenResponse
+        
+        Get ValidateAccessToken to bOk
+        If (not(bOk)) Begin
+            // try refresh
+            Get RefreshTokens to TokenResponse
+            Move TokenResponse.bSuccess to bOk
+            If (bOk) Begin
+                Get SsoLoginSuccess TokenResponse to TokenResponse
+            End
+        End
+        
+        Function_Return bOk
+    End_Function
+
+    Function SsoActiveIdentity tSsoIdentity ByRef tIdentity Returns Boolean
+        Error DFERR_PROGRAM "cSsoStateBase_mixin.SsoActiveIdentity should be implemented."
+        Function_Return False
+    End_Function
+    
+    Function GetIdToken String sProviderId Returns String
+        Error DFERR_PROGRAM "cSsoStateBase_mixin.GetIdToken should be implemented."
+        Function_Return ""
+    End_Function
+    
+    Function GetAccessToken String sProviderId Returns String
+        Error DFERR_PROGRAM "cSsoStateBase_mixin.GetAccessToken should be implemented."
+        Function_Return ""
+    End_Function
+    
+    Function GetRefreshToken String sProviderId Returns String
+        Error DFERR_PROGRAM "cSsoStateBase_mixin.GetRefreshToken should be implemented."
+        Function_Return ""
+    End_Function
+    
+    Function ValidateAccessToken Returns Boolean
+        Error DFERR_PROGRAM "cSsoStateBase_mixin.ValidateAccessToken should be implemented."
+        Function_Return False
+    End_Function
+    
+    Function RefreshTokens Returns tSsoTokenResponse
+        tSsoTokenResponse tEmpty
+        Error DFERR_PROGRAM "cSsoStateBase_mixin.RefreshTokens should be implemented."
+        Function_Return tEmpty
+    End_Function
+    
+    { MethodType=Event }
+    Function SsoLoginSuccess tSsoTokenResponse tResponse Returns tSsoTokenResponse
+        // By default do nothing
+        Function_Return tResponse
+    End_Function
+
+    { MethodType=Event }
+    Function SsoLoginFailed tSsoTokenResponse tResponse Returns tSsoTokenResponse
+        // By default do nothing
+        Function_Return tResponse
+    End_Function
+
+    { MethodType=Event }
+    Procedure OnSsoLogoutSuccess
+    End_Procedure
+    
+    // Events for persistence (Windows uses a single process so the data is always synchronized but for web this is not hte case)
+    { MethodType=Event }
+    Procedure OnSsoLoadState
+    End_Procedure
+    
+    { MethodType=Event }
+    Procedure OnSsoSaveState
+    End_Procedure
+End_Class

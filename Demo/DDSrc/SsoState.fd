@@ -1,0 +1,13 @@
+#REPLACE FILE1 SsoState
+#REPLACE SsoState.Recnum |FN1,0
+#REPLACE SsoState.SessionKey |FS1,1
+#REPLACE SsoState.StateKey |FS1,2
+#REPLACE SsoState.ProviderId |FS1,3
+#REPLACE SsoState.Subject |FS1,4
+#REPLACE SsoState.AccessToken |FS1,5
+#REPLACE SsoState.RefreshToken |FS1,6
+#REPLACE SsoState.Scopes |FS1,7
+#REPLACE SsoState.ExpiresAtDate |FD1,8
+#REPLACE SsoState.ExpiresAtTime |FS1,9
+#REPLACE SsoState.UpdatedAtDate |FD1,10
+#REPLACE SsoState.UpdateAtTime |FS1,11

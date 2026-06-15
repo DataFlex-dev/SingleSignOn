@@ -1,0 +1,24 @@
+{
+    "dependencies": [
+        "DataFlex-dev/JsonWebToken#<2.0.0"
+    ],
+    "description": "The official DataFlex Single Sign On library",
+    "df": 26.0,
+    "package": {
+        "install": [
+            "${Programs}\\libcrypto-3.dll",
+            "${Programs}\\libcrypto-3-x64.dll"
+        ],
+        "license": "BSD-3-Clause",
+        "version": "2.0.0"
+    },
+    "paths": {
+        "fileList": "DummyFilelist.cfg"
+    },
+    "projects": [
+        "SSO.src"
+    ],
+    "studio": {
+        "DefaultFormHeight": 12
+    }
+}

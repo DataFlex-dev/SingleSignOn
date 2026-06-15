@@ -1,0 +1,590 @@
+﻿Use SSO\Sso.pkg
+Use JWT\JWT.pkg
+Use SSO\cRequestSender.pkg
+Use SSO\JWKSStructs.pkg
+
+// Note that all the functions have their visibility set to private, this is because those functions should be called through the API and not directly on the provider object
+Class cSsoProviderOpenId is a cSsoProvider
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Handle hoRequestSender hoJWT
+        
+        Property Integer    peAlgorithm
+        Property stJWTKey[] pstaJWTPublicKeys
+        
+        Property Handle     phoRequestSender
+        Property Handle     phoJWT
+        
+        Property String     psSSOHost
+        
+        Property String     psScopeParam
+        
+        Property Boolean    pbAutoDiscovery
+        Property String     psDiscoveryEndpoint
+        
+        Property Boolean    pbForceCodeChallenge
+        Property String     psLoginEndpoint
+        Property String     psTokenEndpoint
+        Property String     psIntrospectEndpoint
+        Property String     psLogoutEndpoint
+        Property String     psUserInfoEndpoint
+        Property String     psTokenRevocationEndpoint
+        
+        Property String     psJWKSEndpoint
+        Property Boolean    pbAutoloadCertificates
+        
+        Get Create (RefClass(cSSORequestSender)) to hoRequestSender
+        Set phoRequestSender to hoRequestSender
+        
+        Get Create (RefClass(cJsonWebToken)) to hoJWT
+        Set phoJWT to hoJWT
+    End_Procedure
+    
+    Procedure End_Construct_Object
+        Forward Send End_Construct_Object
+        Integer iCounter
+        Boolean bOk
+        String sSSOHost
+        Handle hoRequestSender hoJWT
+        stJWTKey[] taJWTPublicKeys
+        stJWTKey[] taJWTPublicKeysTemp
+        
+        Get psSSOHost to sSSOHost
+        Get phoRequestSender to hoRequestSender
+        Set psSSOHost of hoRequestSender to sSSOHost // The original SSO host
+        
+        // Copy discovery endpoint to allow for auto discovery
+        Set psDiscoveryEndpoint of hoRequestSender to (psDiscoveryEndpoint(Self))
+        
+        If (pbAutoDiscovery(Self)) Begin
+            // Auto discovery
+            Send AutoDiscovery
+        End
+        
+        // Copy property values to request sender
+        Set pbPublicClient of hoRequestSender to (pbPublicClient(Self))
+        Set psIdentityClientID of hoRequestSender to (psIdentityClientID(Self))
+        Set psIdentityClientSecret of hoRequestSender to (psIdentityClientSecret(Self))
+        Set psTokenEndpoint of hoRequestSender to (psTokenEndpoint(Self))
+        Set psIntrospectEndpoint of hoRequestSender to (psIntrospectEndpoint(Self))
+        Set psUserInfoEndpoint of hoRequestSender to (psUserInfoEndpoint(Self))
+        Set psTokenRevocationEndpoint of hoRequestSender to (psTokenRevocationEndpoint(Self))
+        Set psJWKSEndpoint of hoRequestSender to (psJWKSEndpoint(Self))   
+        Send SetupHost of hoRequestSender ""
+        
+        //Initialize the JWT object
+        Get phoJWT to hoJWT
+        Set peAlgorithm of hoJWT to (peAlgorithm(Self))
+        
+        Get pstaJWTPublicKeys to taJWTPublicKeys
+        //Auto load the certifactes from the jwks endpoint if necessary.
+        If (pbAutoloadCertificates(Self)) Begin
+            Get LoadCertificates to taJWTPublicKeysTemp
+        End
+        If (SizeOfArray(taJWTPublicKeysTemp) > 0) Begin 
+            Move (AppendArray(taJWTPublicKeys, taJWTPublicKeysTemp)) to taJWTPublicKeys
+        End
+        
+        For iCounter from 0 to (SizeOfArray(taJWTPublicKeys) -1)
+            Get AddJWTPublicKey of hoJWT taJWTPublicKeys[iCounter].sKeyIdentifier taJWTPublicKeys[iCounter].sKey to bOk
+            If (not(bOk)) ;
+                Error DFERR_SETUP "Couldn't add JWT Public key"
+        Loop
+        
+        Send RegisterProvider of ghoSso (Self)
+    End_Procedure
+    
+    Procedure SetLoginEndpoint String sValue
+        Set psLoginEndpoint to sValue
+    End_Procedure
+    
+    Procedure SetTokenEndpoint String sValue
+        Set psTokenEndpoint to sValue
+    End_Procedure
+    
+    Procedure SetIntrospectEndpoint String sValue
+        Set psIntrospectEndpoint to sValue
+    End_Procedure
+    
+    Procedure SetLogoutEndpoint String sValue
+        Set psLogoutEndpoint to sValue
+    End_Procedure
+
+    Procedure SetUserInfoEndpoint String sValue
+        Set psUserInfoEndpoint to sValue
+    End_Procedure
+    
+    Procedure SetTokenRevocationEndpoint String sValue
+        Set psTokenRevocationEndpoint to sValue
+    End_Procedure
+        
+    Procedure SetJWKSEndpoint String sValue
+        Set psJWKSEndpoint to sValue
+    End_Procedure
+    
+    Procedure AutoDiscovery
+        Boolean bOk
+        String sResult
+        Handle hoJson
+        tSsoOpenIDDiscovery Discovery
+        
+        // Make a call to the openid configuration endpoint
+        Get GetDiscovery of (phoRequestSender(Self)) to bOk
+        Get psResultData of (phoRequestSender(Self)) to sResult
+        Set psResultData of (phoRequestSender(Self)) to ''
+        
+        If (sResult = '') ;
+            Procedure_Return
+        
+        Get Create (RefClass(cJsonObject)) to hoJson
+        Get ParseString of hoJson sResult to bOk
+        If (not(bOk)) Begin
+            Send Destroy of hoJson
+            Procedure_Return
+        End
+        
+        Set pbRequireAllMembers of hoJson to False
+        Get JsonToDataType of hoJson to Discovery
+        
+        Send SetEndpoint Discovery.sAuthorizationEndpoint   (RefProc(SetLoginEndpoint))
+        Send SetEndpoint Discovery.sTokenEndpoint           (RefProc(SetTokenEndpoint))
+        Send SetEndpoint Discovery.sUserinfoEndpoint        (RefProc(SetUserInfoEndpoint))
+        Send SetEndpoint Discovery.sJwksUri                 (RefProc(SetJWKSEndpoint))
+        Send SetEndpoint Discovery.sRevocationEndpoint      (RefProc(SetTokenRevocationEndpoint))
+        Send SetEndpoint Discovery.sIntrospectionEndpoint   (RefProc(SetIntrospectEndpoint))
+        Send SetEndpoint Discovery.sEndSessionEndpoint      (RefProc(SetLogoutEndpoint))
+        Send Destroy of hoJson
+    End_Procedure
+    
+    // Helper function for the auto-discovery
+    Procedure SetEndpoint String sEndpointValue Handle hmSetter
+        Integer iSize iPos iHostSize
+        String sSsoHost
+        
+        Get psSSOHost to sSsoHost
+        Move (SizeOfString(sSsoHost)) to iHostSize
+        Move (SizeOfString(sEndpointValue)) to iSize
+        
+        If (iSize > 0) Begin
+            Move (Pos(sSsoHost, sEndpointValue)) to iPos
+            
+            If (iPos = 1) Begin // Starts with the same host, make relative
+                Send hmSetter (Right(sEndpointValue, iSize - iHostSize))
+            End
+            Else Begin
+                Send hmSetter sEndpointValue
+            End
+        End
+    End_Procedure
+    
+    { Visibility=Private }
+    Function LoadCertificates Returns stJWTKey[]
+        Integer iCounter
+        Boolean bOk
+        String sResult sE sN
+        Handle hoJsonObject
+        stJWKSKeys tJWKSKeys
+        stJWTKey[] tJWTKeys
+        UChar[] ucaN ucaE
+        
+        Get GetCertficates of (phoRequestSender(Self)) to bOk
+        Get psResultData of (phoRequestSender(Self)) to sResult
+        Set psResultData of (phoRequestSender(Self)) to ''
+        If (sResult = '') Function_Return tJWTKeys
+        
+        Get Create (RefClass(cJsonObject)) to hoJsonObject
+        Get ParseString of hoJsonObject sResult to bOk
+        If (not(bOk)) Begin
+            Send Destroy of hoJsonObject
+            Function_Return tJWTKeys
+        End
+        
+        Set pbRequireAllMembers of hoJsonObject to False
+        Get JsonToDataType of hoJsonObject to tJWKSKeys
+        Send Destroy of hoJsonObject
+        
+        For iCounter from 0 to (SizeOfArray(tJWKSKeys.stJWKSKeys) - 1)
+            Move tJWKSKeys.stJWKSKeys[iCounter].sKID to tJWTKeys[iCounter].sKeyIdentifier
+            If (SizeOfArray(tJWKSKeys.stJWKSKeys[iCounter].sX5C) > 0) Begin
+                Move (sFormat("""
+                -----BEGIN CERTIFICATE-----
+                %1
+                -----END CERTIFICATE-----
+                """ , tJWKSKeys.stJWKSKeys[iCounter].sX5C[0])) to tJWTKeys[iCounter].sKey                
+            End
+            Else If (tJWKSKeys.stJWKSKeys[iCounter].sKTY = "RSA") Begin
+                // Fallback to modulus + exponent (Mandatory fields)
+                Get g_Base64UrlDecodeStr tJWKSKeys.stJWKSKeys[iCounter].sN to sN
+                Get g_Base64UrlDecodeStr tJWKSKeys.stJWKSKeys[iCounter].sE to sE
+                
+                Get RsaPublicPemFromModulusExponent (StringToUCharArray(sN)) (StringToUCharArray(sE)) to tJWTKeys[iCounter].sKey
+            End
+        Loop
+        
+        Function_Return tJWTKeys
+    End_Function
+    
+    { Visibility=Private }
+    Function GetCertificates Returns stJWTKey[]
+        Handle hoJWT
+        stJWTKey[] staPublicKeys
+        
+        Get phoJWT to hoJWT
+        Get pstaJWTPublicKeys of hoJWT to staPublicKeys
+        Function_Return staPublicKeys
+    End_Function
+    
+    { Visibility=Private }
+    Procedure SendSsoLoginRequest String sClientID String sCallBackUrl String sState String sPrompt
+        String sEndpoint sScope sCodeChallenge sCodeChallengeMethod sEncryptedCodeVerifier sCodeChallengeParam sHost sPath
+        Boolean bPublic bRelative bForceCodeChallenge
+        Handle hoRequestSender
+        
+        Get pbPublicClient to bPublic
+        Get pbForceCodeChallenge to bForceCodeChallenge
+        Get psLoginEndpoint to sEndpoint
+        
+        If (sEndpoint = '') Begin
+            Error DFERR_SETUP "Login endpoint isn't filled."
+            Procedure_Return
+        End
+        
+        // if it doesn't start with a protocol it's relative
+        Move (not(Pos("https://", sEndpoint) = 1 and Pos("http://", sEndpoint) = 1)) to bRelative
+        If (bRelative) Begin
+            Move (psSSOHost(Self) + sEndpoint) to sEndpoint
+        End
+        
+        Get psScopeParam to sScope
+        
+        If (bPublic or bForceCodeChallenge) Begin
+            Get EncryptedCodeVerifier of ghoSso C_SSO_CODE_VERIFIER_METHOD_S256 (&sCodeChallenge) (&sCodeChallengeMethod) to sEncryptedCodeVerifier
+            Move (SFormat("&code_challenge=%1&code_challenge_method=%2", sCodeChallenge, sCodeChallengeMethod)) to sCodeChallengeParam
+            
+            // Add code_verifier information to the state
+            Move (sState + C_SSO_STATE_SEPARATOR + sEncryptedCodeVerifier) to sState
+        End
+        
+        If (SizeOfString(sPrompt) > 0) Begin
+            Move ("&prompt=" + sPrompt) to sPrompt            
+        End
+        
+        Get g_Base64UrlEncodeStr sState to sState
+        Move (SFormat(sEndpoint + '?client_id=%1&redirect_uri=%2&state=%3&response_type=code&scope=%4&nonce=xyz%5%6' ,;
+            sClientID, sCallBackUrl, sState, sScope, sPrompt, sCodeChallengeParam)) to sEndpoint
+            
+        Send NavigateToPage of ghoWebApp sEndpoint btCurrentWindow
+    End_Procedure
+    
+    { Visibility=Private }
+    Procedure SendSsoLogoutRequest String sIdToken String sRedirectUri
+        String sEndpoint sHost sPath
+        Boolean bRelative
+        Handle hoRequestSender
+        String[] asParams
+        
+        Get psLogoutEndpoint to sEndpoint
+
+        If (sEndpoint = '') Begin
+            // Logout endpoints are optional in the OIDC Specification
+            Procedure_Return
+        End
+        
+        // if it doesn't start with a protocol it's relative
+        Move (not(Pos("https://", sEndpoint) = 1 and Pos("http://", sEndpoint) = 1)) to bRelative
+        If (bRelative) Begin
+            Move (psSSOHost(Self) + sEndpoint) to sEndpoint
+        End
+        
+        Get UrlEncode sRedirectUri False to sRedirectUri
+        Move ("post_logout_redirect_uri=" + sRedirectUri) to asParams[SizeOfArray(asParams)]
+        
+        If (sIdToken <> "") Begin
+            Move ("id_token_hint=" + UrlEncode(sIdToken, True)) to asParams[SizeOfArray(asParams)]
+        End
+        
+        If (Pos("?", sEndpoint) > 0) Begin
+            Move (sEndpoint + "&" + StrJoinFromArray(asParams, "&")) to sEndpoint
+        End
+        Else Begin
+            Move (sEndpoint + "?" + StrJoinFromArray(asParams, "&")) to sEndpoint
+        End
+        
+        Send NavigateToPage of ghoWebApp sEndpoint btCurrentWindow
+    End_Procedure
+    
+    { Visibility=Private }
+    Function RevokeAccessToken String sAccessToken Returns Boolean
+        Boolean bRequestSuccessful
+        Get RevokeAccessToken of (phoRequestSender(Self)) sAccessToken to bRequestSuccessful
+        Set psResultData of (phoRequestSender(Self)) to ''
+        Function_Return bRequestSuccessful
+    End_Function
+    
+    { Visibility=Private }
+    Function ExchangeAuthorizationCode String sCode String sRedirectUri String sCodeVerifier Returns tSsoTokenResponse
+        String sResult
+        tSsoTokenResponse tResponse
+        Handle hoJson
+        
+        If (SizeOfString(sCodeVerifier) > 0) Begin
+            Get SSORequestToken of (phoRequestSender(Self)) sCode sRedirectUri sCodeVerifier to tResponse.bSuccess
+        End
+        Else Begin
+            Get SSORequestToken of (phoRequestSender(Self)) sCode sRedirectUri to tResponse.bSuccess
+        End
+        
+        Get ParseTokenResponse (psScopeParam(Self)) to tResponse
+        Function_Return tResponse
+    End_Function
+    
+    { Visibility=Private }
+    Function RevokeRefreshToken String sRefreshToken Returns Boolean
+        Boolean bRequestSuccessful
+        Get RevokeRefreshToken of (phoRequestSender(Self)) sRefreshToken to bRequestSuccessful
+        Set psResultData of (phoRequestSender(Self)) to ''
+        Function_Return bRequestSuccessful
+    End_Function
+    
+    { Visibility=Private }
+    Function RefreshTokens String sRefreshToken String sScope Returns tSsoTokenResponse
+        Boolean bValid
+        tSsoTokenResponse stTokenResponse
+        
+        Get SSORefreshToken of (phoRequestSender(Self)) sRefreshToken sScope to bValid
+        Get ParseTokenResponse sScope to stTokenResponse
+        
+        Function_Return stTokenResponse
+    End_Function
+    
+    { Visibility=Private }
+    Function ValidateAccessToken String sAccessToken Returns Boolean
+        Integer iRetVal
+        Handle hoJWT
+        UBigInt ubiJWTExpiration
+        
+        Get phoJWT to hoJWT
+        
+        /*
+        Decode String, decodes the jwt and fills all the properties, also it validates the signature.
+        The expiration, not before and default jwt structure is also validated for you.
+        When you do get an error, you can call 'Get ErrorCodeToErrorMessage iRetVal to sRetval' to get an error message instead of an errorcode.
+        */
+        Get DecodeString of hoJWT sAccessToken to iRetVal
+        If (iRetVal <> C_JWT_VALID) Function_Return False 
+        //Do all your extra validation below.
+        
+        
+        Function_Return True
+    End_Function
+    
+    { Visibility=Private }
+    Function IntrospectToken String sToken String sOptTokenTypeHint Returns tSsoIntrospectResult
+        Boolean bRequestSuccessful bOk
+        String sData
+        Integer iHttpStatus
+        Handle hoJsonObj
+        tSsoIntrospectResult stResult
+        
+        If (num_arguments > 1) ;
+            Get SSOIntrospectToken of (phoRequestSender(Self)) sToken sOptTokenTypeHint to bRequestSuccessful
+        Else ;
+            Get SSOIntrospectToken of (phoRequestSender(Self)) sToken to bRequestSuccessful
+        
+        Get psResultData of (phoRequestSender(Self)) to sData
+        Set psResultData of (phoRequestSender(Self)) to ''
+        Get ResponseStatusCode of (phoRequestSender(Self)) to iHttpStatus
+
+        Move bRequestSuccessful to stResult.bSuccess
+        Move sData to stResult.sRawResponse
+        
+        If (not(bRequestSuccessful) or iHttpStatus <> 200) Begin
+            Move False to stResult.bSuccess
+            Move "Introspection request failed" to stResult.sError
+            Function_Return stResult
+        End
+
+        Get Create (RefClass(cJsonObject)) to hoJsonObj
+        Get ParseUtf8 of hoJsonObj sData to bOk
+        If (not(bOk)) Begin
+            Move False to stResult.bSuccess
+            Move "Invalid json structure received" to stResult.sError
+            Function_Return stResult
+        End
+
+        If (HasMember(hoJsonObj, "active")) Begin
+            Get MemberValue of hoJsonObj "active" to stResult.bActive
+        End
+        If (HasMember(hoJsonObj, "scope")) Begin
+            Get MemberValue of hoJsonObj "scope" to stResult.sScope
+        End
+        If (HasMember(hoJsonObj, "client_id")) Begin
+            Get MemberValue of hoJsonObj "client_id" to stResult.sClientId
+        End
+        If (HasMember(hoJsonObj, "username")) Begin
+            Get MemberValue of hoJsonObj "username" to stResult.sUsername
+        End
+        If (HasMember(hoJsonObj, "token_type")) Begin
+            Get MemberValue of hoJsonObj "token_type" to stResult.sTokenType
+        End
+        If (HasMember(hoJsonObj, "exp")) Begin
+            Get MemberValue of hoJsonObj "exp" to stResult.ubiExpiration
+        End
+        If (HasMember(hoJsonObj, "iat")) Begin
+            Get MemberValue of hoJsonObj "iat" to stResult.ubiIssuedAt
+        End
+        If (HasMember(hoJsonObj, "nbf")) Begin
+            Get MemberValue of hoJsonObj "nbf" to stResult.ubiNotBefore
+        End
+        If (HasMember(hoJsonObj, "sub")) Begin
+            Get MemberValue of hoJsonObj "sub" to stResult.sSubject
+        End
+        If (HasMember(hoJsonObj, "aud")) Begin
+            Get MemberValue of hoJsonObj "aud" to stResult.sAudience
+        End
+        If (HasMember(hoJsonObj, "iss")) Begin
+            Get MemberValue of hoJsonObj "iss" to stResult.sIssuer
+        End
+        If (HasMember(hoJsonObj, "jti")) Begin
+            Get MemberValue of hoJsonObj "jti" to stResult.sJwtId
+        End
+
+        Send Destroy of hoJsonObj
+
+        Function_Return stResult
+    End_Function
+    
+    { Visibility=Private }
+    Function GetSsoUserInfo String sAccessToken Returns tSsoUserInfo
+        Boolean bRequestSuccessful bOk
+        String sData sVal sName
+        Integer iHttpStatus iIndex iIndexTo iJsonType
+        Handle hoJsonObj hoMember hoRequestSender
+        tSsoUserInfo UserInfo
+        
+        Get phoRequestSender to hoRequestSender
+        
+        Get GetUserInformation of hoRequestSender sAccessToken to bRequestSuccessful
+        Get psResultData of hoRequestSender to sData
+        Set psResultData of hoRequestSender to ''
+        Get ResponseStatusCode of hoRequestSender to iHttpStatus
+
+        If (bRequestSuccessful and iHttpStatus = 200) Begin
+            Get Create (RefClass(cJsonObject)) to hoJsonObj
+            Get ParseString of hoJsonObj sData to bOk
+            If (not(bOk)) Begin
+                Send Destroy of hoJsonObj
+                Function_Return UserInfo //should be empty
+            End
+            
+            // Sub is mandatory to be returned
+            Get MemberValue of hoJsonObj "sub" to sVal
+            Move sVal to UserInfo.sSubject
+            
+            Move (MemberCount(hoJsonObj) - 1) to iIndexTo
+            
+            // Loop over the rest
+            For iIndex from 0 to iIndexTo
+                Get MemberNameByIndex of hoJsonObj iIndex to sName
+                
+                // Do something to get value of member to sval (only if primitive type?)
+                
+                // Skip sub
+                If (sName <> "sub") Begin
+                    Get MemberByIndex of hoJsonObj iIndex to hoMember
+                    Get JsonType of hoMember to iJsonType
+                    
+                    // Only extract primitive types
+                    If (iJsonType = jsonTypeBoolean or iJsonType = jsonTypeDouble or iJsonType = jsonTypeInteger or iJsonType = jsonTypeString) Begin
+                        Get MemberValue of hoJsonObj sName to sVal
+                        Get AddUserInfoField of ghoSso UserInfo sName sVal to UserInfo
+                    End
+                    Send Destroy of hoMember
+                End
+            Loop
+        End
+        
+        If (hoJsonObj <> 0) Begin
+            Send Destroy of hoJsonObj
+        End
+
+        Function_Return UserInfo
+    End_Function
+    
+    { Visibility=Private }
+    Function ParseTokenResponse String sRequestedScopes Returns tSsoTokenResponse
+        String sResult
+        Handle hoJson hoJwt
+        tSsoTokenResponse stTokenResponse
+        Integer iExpiresIn iRetVal
+        Boolean bGetSubject
+        tSsoUserInfo UserInfo
+        
+        Move True to bGetSubject
+        Get psResultData of (phoRequestSender(Self)) to sResult
+        Set psResultData of (phoRequestSender(Self)) to ''
+        
+        Move sResult to stTokenResponse.sRawResponse
+        Get psProviderID to stTokenResponse.sProviderId
+        
+        Get Create (RefClass(cJsonObject)) to hoJson
+        Get ParseString of hoJson sResult to stTokenResponse.bSuccess
+        If (not(stTokenResponse.bSuccess)) Begin
+            Move "Invalid json structure received" to stTokenResponse.sError
+            Send Destroy of hoJson
+            Function_Return stTokenResponse
+        End
+        
+        If (HasMember(hoJson, "error")) Begin
+            Move False to stTokenResponse.bSuccess
+            Get MemberValue of hoJson "error" to stTokenResponse.sError
+            Send Destroy of hoJson
+            Function_Return stTokenResponse
+        End
+        
+        Get MemberValue of hoJson "access_token" to stTokenResponse.sAccessToken // Mandatory
+        
+        If (HasMember(hoJson, "token_type")) Begin
+            Get MemberValue of hoJson "token_type" to stTokenResponse.sTokenType
+        End
+        If (HasMember(hoJson, "expires_in")) Begin
+            Get MemberValue of hoJson "expires_in" to iExpiresIn
+            Move (CurrentDateTime()) to stTokenResponse.dtExpiresAt
+            Move (DateAddSecond(stTokenResponse.dtExpiresAt, iExpiresIn)) to stTokenResponse.dtExpiresAt
+        End
+        If (HasMember(hoJson, "refresh_token")) Begin
+            Get MemberValue of hoJson "refresh_token" to stTokenResponse.sRefreshToken
+        End
+        If (HasMember(hoJson, "id_token")) Begin
+            Get MemberValue of hoJson "id_token" to stTokenResponse.sIdToken
+            
+            // If we got an IDToken we can extract the subject
+            Get phoJWT to hoJwt
+            
+            If (hoJwt) Begin
+                Get DecodeString of hoJwt stTokenResponse.sIdToken to iRetVal
+                If (iRetVal = C_JWT_VALID) Begin
+                    Move False to bGetSubject
+                    Get Subject of hoJwt to stTokenResponse.sSubject 
+                End
+            End
+        End
+        If (HasMember(hoJson, "scope")) Begin
+            Get MemberValue of hoJson "scope" to stTokenResponse.sScope
+        End
+        Else Begin
+            // If we didn't get a scope member the server has agreed to our requested scopes
+            Move sRequestedScopes to stTokenResponse.sScope
+        End
+        
+        If (bGetSubject) Begin
+            Get GetSsoUserInfo stTokenResponse.sAccessToken to UserInfo
+            Move UserInfo.sSubject to stTokenResponse.sSubject
+        End
+        
+        Send Destroy of hoJson
+        
+        Function_Return stTokenResponse
+    End_Function
+End_Class

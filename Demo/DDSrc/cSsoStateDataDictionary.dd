@@ -1,0 +1,101 @@
+﻿Use DataDict.pkg
+
+Open SsoState
+
+Class cSsoStateDataDictionary is a DataDictionary
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set Main_File to SsoState.File_Number
+
+        Set Foreign_Field_Option DD_KEYFIELD DD_NOPUT to True
+        Set Foreign_Field_Option DD_KEYFIELD DD_FINDREQ to True
+        Set Foreign_Field_Option DD_INDEXFIELD DD_NOPUT to True
+        Set Foreign_Field_Option DD_DEFAULT DD_DISPLAYONLY to True
+
+    End_Procedure
+    
+    Procedure Creating
+        DateTime dtCurrentDateTime
+        
+        Forward Send Creating
+        
+        //  Set the creation and access time to the current time
+        Move (CurrentDateTime())            to dtCurrentDateTime
+        Get TimeToString dtCurrentDateTime  to SsoState.UpdateAtTime
+        Move dtCurrentDateTime              to SsoState.UpdatedAtDate
+    End_Procedure
+    
+    // Can be called when a record is in the buffer to update the expiration or when no record is in the buffer to initialize a new record
+    Procedure SetExpiration DateTime dtExpiration
+        String sExpirationTime
+        
+        Get TimeToString dtExpiration to sExpirationTime
+        Set Field_Changed_Value Field SsoState.ExpiresAtTime to sExpirationTime
+        Set Field_Changed_Value Field SsoState.ExpiresAtDate to dtExpiration
+    End_Procedure
+    
+    //
+    //  Converts the given time to an string that can be saved in the database.
+    //
+    //  Params:
+    //      dtTime  Time to convert
+    //  Returns:
+    //      String with "HH:MM:SS" format
+    //
+    { Visibility=Private }
+    Function TimeToString DateTime dtTime Returns String
+        String sHours sMinutes sSeconds
+        
+        //  Extract parts
+        Move (String(DateGetHour(dtTime))) to sHours
+        Move (String(DateGetMinute(dtTime))) to sMinutes
+        Move (String(DateGetSecond(dtTime))) to sSeconds
+        
+        //  Fill out with 0
+        If (Length(sHours) = 1) ;
+            Move ("0" + sHours) to sHours
+        If (Length(sMinutes) = 1) ;
+            Move ("0" + sMinutes) to sMinutes
+        If (Length(sSeconds) = 1) ;
+            Move ("0" + sSeconds) to sSeconds
+        
+        Function_Return (sHours + ":" + sMinutes + ":" + sSeconds)
+    End_Function
+    
+    //
+    //  Sets the time of the datetime variable to the time in the string.
+    //
+    //  Params:
+    //      dtTime  Datetime variable to add time to
+    //      sTimeString String with time in the format "HH:MM:SS"
+    //  Returns:
+    //      dtDateTime with the loaded time
+    //
+    { Visibility=Private }
+    Function StringToTime DateTime dtTime String sTimeString Returns DateTime
+        String sHours sMinutes sSeconds
+        
+        //  Extract parts
+        Move (Mid(sTimeString, 2, 1)) to sHours
+        Move (Mid(sTimeString, 2, 4)) to sMinutes
+        Move (Mid(sTimeString, 2, 7)) to sSeconds
+        
+        //  Set to DateTime
+        Move (DateSetHour(dtTime, (Integer(sHours)))) to dtTime
+        Move (DateSetMinute(dtTime, (Integer(sMinutes)))) to dtTime
+        Move (DateSetSecond(dtTime, (Integer(sSeconds)))) to dtTime
+        
+        Function_Return dtTime
+    End_Function
+
+    Procedure OnSaveRecord
+        DateTime dtNow
+        
+        Forward Send OnSaveRecord
+        
+        Move (CurrentDateTime())    to dtNow
+        Get TimeToString dtNow      to SsoState.UpdateAtTime
+        Move dtNow                  to SsoState.UpdatedAtDate
+    End_Procedure
+End_Class

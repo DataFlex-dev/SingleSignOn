@@ -1,0 +1,155 @@
+﻿Use SSO\cSSOWebSessionManager.pkg
+Use cSsoStateDataDictionary.dd
+Use cSsoUserMappingDataDictionary.dd
+
+Object oSessionManager is a cSsoWebSessionManager
+    Object oSsoUserMapping_DD is a cSsoUserMappingDataDictionary
+    End_Object
+
+    Object oSsoState_DD is a cSsoStateDataDictionary
+    End_Object
+
+    Set Main_DD to oSsoState_DD
+    Set psStateKey to "SSODemo"
+    
+    Function MapSsoUserInfoToLocalUser String sProviderId tSsoUserInfo UserInfo Returns String
+        String sLoginName sEmail sFullName
+        Boolean bVerified
+        Handle hoUserDD
+        
+        Send Clear of oSsoUserMapping_DD
+        Move sProviderId to SsoUserMapping.ProviderId
+        Move UserInfo.sSubject to SsoUserMapping.Subject
+        Send Find of oSsoUserMapping_DD GE 0
+        
+        If (Found and sProviderId = SsoUserMapping.ProviderId and UserInfo.sSubject = SsoUserMapping.Subject) Begin
+            // Existing mapping
+            Move SsoUserMapping.UserLogin to sLoginName
+        End
+        Else Begin
+            // Attempt to match on email? Important: Only if the email is verified by the provider
+            Get SsoUserInfoFieldValue of ghoSso UserInfo "email" to sEmail
+            Get SsoUserInfoFieldValue of ghoSso UserInfo "email_verified" to bVerified
+            
+            Get phoUserDD to hoUserDD
+            If (hoUserDD <> 0 and SizeOfString(sEmail) > 0 and bVerified) Begin
+                Send Clear of hoUserDD
+                Move sEmail to WebAppUser.LoginName
+                Send Find of hoUserDD EQ 1
+                
+                If (Found) Begin
+                    Send CreateSsoMapping sProviderId UserInfo sEmail
+                    Move sEmail to sLoginName
+                End
+                Else Begin
+                    // Get full name of person, if it stays empty we could prompt the user after login by writing custom business logic in the OnLoad of WebApp
+                    Get SsoUserInfoFieldValue of ghoSso UserInfo "name" to sFullName
+                    
+                    // Create new account + usermapping
+                    Send CreateAccount sEmail sFullName
+                    Send CreateSsoMapping sProviderId UserInfo sEmail
+                    Move sEmail to sLoginName
+                End
+            End
+        End
+        
+        // If it's still empty here "SsoLoginFailed" will be called by the cSsoWebSessionManager
+        Function_Return sLoginName
+    End_Function
+
+    Procedure CreateSsoMapping String sProviderId tSsoUserInfo UserInfo String sLocalIdentifier
+        Boolean bErr
+        
+        Send Clear of oSsoUserMapping_DD
+        Set Field_Changed_Value of oSsoUserMapping_DD Field SsoUserMapping.ProviderId   to sProviderId
+        Set Field_Changed_Value of oSsoUserMapping_DD Field SsoUserMapping.Subject      to UserInfo.sSubject
+        Set Field_Changed_Value of oSsoUserMapping_DD Field SsoUserMapping.UserLogin    to sLocalIdentifier
+        Set Field_Changed_Value of oSsoUserMapping_DD Field SsoUserMapping.ProviderId   to sProviderId
+        Get Request_Validate of oSsoUserMapping_DD to bErr
+        
+        If (not(bErr)) Begin
+            Send Request_Save of oSsoUserMapping_DD
+        End
+    End_Procedure
+    
+    Procedure CreateAccount String sLoginName String sFullName
+        Handle hoUserDD
+        Boolean bErr
+        
+        Get phoUserDD to hoUserDD
+        If (hoUserDD <> 0) Begin
+            Send Clear of hoUserDD
+            Set Field_Changed_Value of hoUserDD Field WebAppUser.LoginName  to sLoginName
+            Set Field_Changed_Value of hoUserDD Field WebAppUser.FullName   to sFullName
+            Get Request_Validate of hoUserDD to bErr
+            
+            If (not(bErr)) Begin
+                Send Request_Save of hoUserDD
+            End
+        End
+    End_Procedure
+
+    Procedure OnSsoLoadState
+        String sSessionKey sExpiresAtTime
+        tSsoIdentity tIdentity
+        
+        // Use sessionkey as discriminator.
+        Get psSessionKey to sSessionKey
+        If (SizeOfString(sSessionKey) > 0) Begin
+            Send Clear of oSsoState_DD
+            Move sSessionKey to SsoState.SessionKey
+            Move (psStateKey(Self)) to SsoState.StateKey
+            Send Find of oSsoState_DD EQ 1
+            
+            If (Found) Begin
+                Move SsoState.ProviderId    to tIdentity.sProviderId
+                Move SsoState.Subject       to tIdentity.sSubject
+                Move SsoState.AccessToken   to tIdentity.sAccessToken
+                Move SsoState.RefreshToken  to tIdentity.sRefreshToken
+                Move SsoState.Scopes        to tIdentity.sScope
+                Move SsoState.ExpiresAtDate to tIdentity.dtExpiresAt
+                Move SsoState.ExpiresAtTime to sExpiresAtTime
+                Get StringToTime of oSsoState_DD tIdentity.dtExpiresAt sExpiresAtTime to tIdentity.dtExpiresAt
+            End
+        End
+        
+        Set ptIdentity to tIdentity
+    End_Procedure
+
+    Procedure OnSsoSaveState
+        String sSessionKey
+        tSsoIdentity tIdentity
+        Boolean bErr
+        
+        // Use sessionkey as discriminator.
+        Get psSessionKey to sSessionKey
+        If (SizeOfString(sSessionKey) > 0) Begin
+            Send Clear of oSsoState_DD
+            Move sSessionKey to SsoState.SessionKey
+            Move (psStateKey(Self)) to SsoState.StateKey
+            Send Find of oSsoState_DD EQ 1
+            
+            // If found we overwrite the existing record, otherwise create a new one
+            If (not(Found)) Begin
+                Set Field_Changed_Value of oSsoState_DD Field SsoState.SessionKey   to sSessionKey
+                Set Field_Changed_Value of oSsoState_DD Field SsoState.StateKey     to (psStateKey(Self))
+            End
+            
+            Get ptIdentity to tIdentity
+            Set Field_Changed_Value of oSsoState_DD Field SsoState.ProviderId       to tIdentity.sProviderId
+            Set Field_Changed_Value of oSsoState_DD Field SsoState.Subject          to tIdentity.sSubject
+            Set Field_Changed_Value of oSsoState_DD Field SsoState.AccessToken      to tIdentity.sAccessToken
+            Set Field_Changed_Value of oSsoState_DD Field SsoState.RefreshToken     to tIdentity.sRefreshToken
+            Set Field_Changed_Value of oSsoState_DD Field SsoState.Scopes           to tIdentity.sScope
+            
+            Send SetExpiration of oSsoState_DD tIdentity.dtExpiresAt 
+            
+            Get Request_Validate of oSsoState_DD to bErr
+            If (not(bErr)) Begin
+                Send Request_Save of oSsoState_DD
+            End
+        End
+    End_Procedure
+End_Object
+
+

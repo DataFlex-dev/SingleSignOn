@@ -1,0 +1,245 @@
+﻿Use GlobalFunctionsProcedures.pkg
+
+Function UriEncodeComponent Global String sURI Returns String
+     String sResult
+     
+     Move (UrlEncode(sURI, False)) to sResult
+     
+     Function_Return sResult
+End_Function
+
+Function UriDecodeComponent Global String sURI Returns String
+    String sResult
+    
+    Move (UrlDecode(sURI)) to sResult
+    
+    Function_Return sResult
+End_Function
+
+Class cURIParser is a cObject
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        
+        Object oMainRegEx is a cRegEx
+            Set psExpression to "(?<scheme>[^:]+):(\/\/((?<user>[^:@\/]+)(:(?<password>[^@\/]+))?@)?(?<host>[^:\/?#]*)(:(?<port>[0-9]+))?)?((?<path>[^?#]*))?(\?(?<query>[^#\n\r]+))?(\#(?<fragment>[^\n\r]+))?"
+        End_Object
+        
+        Object oParamRegEx is a cRegEx
+            Set psExpression to "(?<param>([^=&#]+)=([^=&#]+))"
+            Set pbGreedy to True
+        End_Object
+        
+        
+        Property String psScheme ""
+        Property String psUser ""
+        Property String psPassword ""
+        Property String psHost ""
+        Property String psPort ""
+        Property String[] paPath
+        Property String psFragment ""
+        Property tNameValuePair[] paQueryParams
+    End_Procedure
+    
+    Procedure ClearData
+        tNameValuePair[] aEmpty
+        String[] asEmpty
+        
+        Set psScheme to ""
+        Set psUser to ""
+        Set psPassword to ""
+        Set psHost to ""
+        Set psPort to ""
+        Set paPath to asEmpty
+        Set psFragment to ""
+        
+        Set paQueryParams to aEmpty
+    End_Procedure
+    
+    Procedure ParseURI String sURI
+        String[][] aResult
+        String[] aPath
+        Integer iGroup iGroupTo iPath iPathTo
+        String sQuery sPath
+        
+        Send ClearData
+        
+        //  Crack the full URI
+        Get MatchAllGroups of oMainRegex sURI to aResult
+        
+        If (SizeOfArray(aResult) > 0) Begin
+            Move (SizeOfArray(aResult[0]) - 1) to iGroupTo
+            
+            Move 1 to iGroup
+            While (iGroup < iGroupTo)
+                Case Begin
+                    Case  (aResult[0][iGroup] = "scheme")
+                        Set psScheme to aResult[0][iGroup + 1]
+                        Case Break
+                    Case  (aResult[0][iGroup] = "user")
+                        Set psUser to (UriDecodeComponent(aResult[0][iGroup + 1]))
+                        Case Break
+                    Case  (aResult[0][iGroup] = "password")
+                        Set psPassword to (UriDecodeComponent(aResult[0][iGroup + 1]))
+                        Case Break
+                    Case  (aResult[0][iGroup] = "host")
+                        Set psHost to (UriDecodeComponent(aResult[0][iGroup + 1]))
+                        Case Break
+                    Case  (aResult[0][iGroup] = "port")
+                        Set psPort to aResult[0][iGroup + 1]
+                        Case Break
+                    Case  (aResult[0][iGroup] = "path")
+                        Move aResult[0][iGroup + 1] to sPath
+                        Case Break
+                    Case  (aResult[0][iGroup] = "query")
+                        Move aResult[0][iGroup + 1] to sQuery
+                        Case Break
+                    Case  (aResult[0][iGroup] = "fragment")
+                        Set psFragment to (UriDecodeComponent(aResult[0][iGroup + 1]))
+                        Case Break
+                Case End
+                
+                Move (iGroup + 2) to iGroup
+            Loop
+        End
+        
+        //  Split & decode the path
+        Move (StrSplitToArray(sPath, "/")) to aPath
+        Move (SizeOfArray(aPath) - 1) to iPathTo
+        For iPath from 0 to iPathTo
+            Move (UriDecodeComponent(aPath[iPath])) to aPath[iPath]
+        Loop
+        Set paPath to aPath
+        
+        
+        //  Split the parameters
+        Get MatchAllGroups of oParamRegEx sQuery to aResult
+        
+        If (SizeOfArray(aResult) > 0) Begin
+            Move (SizeOfArray(aResult) - 1) to iGroupTo
+            
+            For iGroup from 0 to iGroupTo
+                If (SizeOfArray(aResult[iGroup]) = 7) Begin
+                    Send SetQueryParam (UriDecodeComponent(aResult[iGroup][4])) (UriDecodeComponent(aResult[iGroup][6]))
+                End
+            Loop
+        End
+    End_Procedure
+    
+    Procedure SetQueryParam String sName String sValue
+        tNameValuePair[] aParams
+        tNameValuePair new
+        Integer iIndex
+        
+        Get paQueryParams to aParams    
+        
+        Move sName to new.sName
+        Move sValue to new.sValue
+        Move (SearchArray(new, aParams)) to iIndex
+        
+        Move new to aParams[iIndex]
+        
+        Set paQueryParams to aParams    
+    End_Procedure
+    
+    Function QueryParam String sName Returns String
+        tNameValuePair[] aParams
+        tNameValuePair new
+        Integer iIndex
+        
+        Get paQueryParams to aParams    
+        
+        Move sName to new.sName
+        Move (SearchArray(new, aParams)) to iIndex
+        
+        If (iIndex <> -1) ;
+            Function_Return aParams[iIndex].sValue
+        
+        Function_Return ""
+    End_Function
+    
+    Function QueryAsStringEncoded Returns String
+        String[] aBuilder
+        tNameValuePair[] aParams
+        Integer iParam iParamTo
+        
+        Get paQueryParams to aParams
+        If (SizeOfArray(aParams) > 0) Begin
+            Move (SizeOfArray(aParams) - 1) to iParamTo
+            Move "?" to aBuilder[-1]
+            For iParam from 0 to iParamTo
+                If (iParam > 0) ;
+                    Move "&" to aBuilder[-1]
+                
+                Move (UriEncodeComponent(aParams[iParam].sName)) to aBuilder[-1]
+                Move "=" to aBuilder[-1]
+                Move (UriEncodeComponent(aParams[iParam].sValue)) to aBuilder[-1]
+            Loop
+        End
+        
+        Function_Return (StrJoinFromArray(aBuilder, ""))
+    End_Function
+    
+    Function PathAsString Returns String
+        Function_Return (StrJoinFromArray(paPath(Self), "/"))
+    End_Function
+    
+    Function PathAsStringEncoded Returns String
+        String[] aPath aEncoded
+        Integer iPart iPartTo
+        
+        Get paPath to aPath
+        Move (SizeOfArray(aPath) - 1) to iPartTo
+        For iPart from 0 to iPartTo
+            Get UriEncodeComponent aPath[iPart] to aEncoded[iPart]
+        Loop
+        
+        Function_Return (StrJoinFromArray(aEncoded, "/"))
+    End_Function
+    
+    Function GenerateURI Returns String
+        String[] aBuilder
+        String sHost sPart
+        
+        Get psScheme to aBuilder[-1]
+        Move ":" to aBuilder[-1]
+        
+        //  Host (user:pass@host:port)
+        Get psHost to sHost
+        If (sHost <> "") Begin
+            Move "//" to aBuilder[-1]
+            Get psUser to sPart
+            If (spart <> "") Begin
+                Move (UriEncodeComponent(sPart)) to aBuilder[-1]
+                
+                Get psPassword to sPart
+                If (sPart <> "") Begin
+                    Move ":" to aBuilder[-1]
+                    Move (UriEncodeComponent(sPart)) to aBuilder[-1]
+                End
+                
+                Move "@" to aBuilder[-1]    
+            End
+            Move (UriEncodeComponent(sHost)) to aBuilder[-1]
+            Get psPort to sPart
+            If (sPart <> "") Begin
+                Move ":" to aBuilder[-1]
+                Move sPart to aBuilder[-1]
+            End
+        End
+        
+        //  Path
+        Get PathAsStringEncoded to aBuilder[-1]
+        
+        //  Query parameters (?param1=val&param2=val2)
+        Get QueryAsStringEncoded to aBuilder[-1]
+        
+        //  Fragment (#thatextrapiece)
+        Get psFragment to sPart
+        If (sPart <> "") Begin
+            Move "#" to aBuilder[-1]
+            Move (UriEncodeComponent(sPart)) to aBuilder[-1]
+        End
+        
+        Function_Return (StrJoinFromArray(aBuilder, ""))
+    End_Function
+End_Class

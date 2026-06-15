@@ -1,0 +1,239 @@
+﻿Use AllWebUIServerClasses.pkg
+Use cConnection.pkg
+
+Define C_SSO_PROVIDER_ENTRAID for "EntraID"
+Define C_SSO_PROVIDER_DFA     for "DFA"
+
+Use SSO\Sso.pkg
+Use SSO\cSsoProviderOpenId.pkg
+Use JWT\JWT.pkg
+Use cWebMenuItem.pkg
+
+Object oApplication is a cApplication
+    Object oConnection is a cConnection
+        Use LoginEncryption.pkg
+    End_Object
+End_Object
+
+Object oWebApp is a cWebApp
+    Set psTheme to "Df_Material"
+    Set peAlignView to alignCenter
+    Set peApplicationStateMode to asmHistoryAndUrls
+    
+    Import_Class_Protocol cSsoOnLoad_mixin
+    
+    Object oSso is a cSsoApi
+        Set psHomeURL to "http://localhost/SSODemo"
+        Set psCallbackURLLogin  to "http://localhost/SSODemo/SSOCallback/Login"
+        Set psCallbackURLLogout to "http://localhost/SSODemo/SSOCallback/Logout"
+    End_Object
+    
+    Object oSsoOpenIdTestProvider is a cSsoProviderOpenId
+        //Encrypting/Decrypting of Tokens
+        Set peAlgorithm to C_JWT_ALG_RS_256
+        //Provider information
+        Set psProviderID to C_SSO_PROVIDER_ENTRAID
+        Set psScopeParam to "openid offline_access email profile"
+        //Client Authentication    
+        Set psIdentityClientID to "51d2b0c1-0984-438e-99b7-5a476892ec08"
+        Set psIdentityClientSecret to 'SE28Q~3N_oLmOGDA~pUKvZmcQ9NsG7RPxiu5.cuP'
+        /*
+        Endpoints
+        E.G. Token Endpoint: 'oauth2/v2.0/token'
+        */
+        Set psSSOHost to 'https://login.microsoftonline.com/'
+        Set psDiscoveryEndpoint to 'b06e49df-17e4-43f2-bfce-6231da0c30ee/.well-known/openid-configuration'
+        Set pbAutoDiscovery to True
+//        Set psUserInfoEndpoint to "https://graph.microsoft.com/oidc/userinfo"
+//        Set psLoginEndpoint to "b06e49df-17e4-43f2-bfce-6231da0c30ee/oauth2/v2.0/authorize"
+//        Set psTokenEndpoint to 'b06e49df-17e4-43f2-bfce-6231da0c30ee/oauth2/v2.0/token'
+//        Set psLogoutEndpoint to 'common/oauth2/v2.0/logout'
+//      
+        //Auto load the certificates.
+        Set pbAutoloadCertificates to True
+        
+/*Example on how to load your own certificate manually.*/  
+//        Procedure loadCertificates
+//            stJWTKey tJWTPublicKey
+//            stJWTKey[] taJWTPublicKeys
+//            Integer iPublicKeyCounter
+//            Move 0 to iPublicKeyCounter
+//            
+//            Move 'z1rsYHHJ9-8mggt4HsZu8BKkBPw' to tJWTPublicKey.sKeyIdentifier
+//            Move """
+//            -----BEGIN CERTIFICATE-----
+//            MIIC/TCCAeWgAwIBAgIIQk8Qok6pfXkwDQYJKoZIhvcNAQELBQAwLTErMCkGA1UEAxMiYWNjb3VudHMuYWNjZXNzY29udHJvbC53aW5kb3dzLm5ldDAeFw0yNDExMjcwOTA0MzlaFw0yOTExMjcwOTA0MzlaMC0xKzApBgNVBAMTImFjY291bnRzLmFjY2Vzc2NvbnRyb2wud2luZG93cy5uZXQwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCk57gZuV4UNPW7mKg5CM0yaG+QNWhUP1wEq9fsCUSu1YD8PrBzXDWLCR3pqthUI85tlsAHi8tJeuWkFI64/pVidfD9xOCeK/9zzatr6Z+oKkz5JurNnexWqVwT9vDG9yL/g+vEBbhHzmiTXY1fJnbfvUffIZ69puLfkCVWb5tDbhrOjWEsr/QPMHpPGwAg5M5wp8i6A5+o/4HZHi9Hi7qlh+1LwxZzF6Cv2Inkk225sjVfYkenEmGRGgxXAoWdrYZea3N3EuLfJL8Z99UIp9NsUyFqVslLWVKYuqGYtlkv6WtBnp9qexOXW9wZyjGfM9PAGRkySzSJVXjJ/Kb+AoFdAgMBAAGjITAfMB0GA1UdDgQWBBSTO5FmUwwGS+1CNqg2uNgjxUjFijANBgkqhkiG9w0BAQsFAAOCAQEAok04z0ICMEHGqDTzx6eD7vvJP8itJTCSz8JcZcGVJofJpViGF3bNnyeSPa7vNDYP1Ps9XBvw3/n2s+yynZ8EwFxMyxCZRCSbLv0N+cAbH3rmZqGcgMJszZVwcFUtXQPTe1ZRyHtEyOB+PVFH7K7obysRVO/cC6EGqIF3pYWzez/dtMaXRAkdTNlz0ko62WoA4eMPwUFCITjW/Jxfxl0BNUbo82PXXKhaeVJb+EgFG5b/pWWPswWmBoQhmD5G1UODvEACHRl/cHsPPqe4YE+6D1/wMno/xqqyGltnk8v0d4TpNcQMn9oM19V+OGgrzWOvvXhvnhqUIVGMsRlyBGNHAw==
+//            -----END CERTIFICATE-----
+//            """ to tJWTPublicKey.sKey
+//            
+//            Move tJWTPublicKey to taJWTPublicKeys[iPublicKeyCounter]
+//            Increment iPublicKeyCounter
+//            
+//            Set pstaJWTPublicKeys to taJWTPublicKeys
+//        End_Procedure
+//        
+//        Send loadCertificates
+    End_Object
+    
+    Object oSsoDfaTestProvider is a cSsoProviderOpenId
+        //Encrypting/Decrypting of Tokens
+        Set peAlgorithm to C_JWT_ALG_RS_256
+        //Provider information
+        Set psProviderID to C_SSO_PROVIDER_DFA
+        Set psScopeParam to "openid offline_access email profile"
+        //Client Authentication    
+        Set psIdentityClientID to "SSODemo"
+        Set psIdentityClientSecret to '9mbSFDIo2Uka3nARlvr41HGlBABk8FARLcMiCh2niYg'
+        //Endpoints
+        Set psSSOHost to 'https://account.dataflex.dev/'
+        // Auto load the endpoints
+        Set pbAutoDiscovery to True
+        //Auto load the certificates.
+        Set pbAutoloadCertificates to True
+    End_Object
+    
+    // It is important to set this so that all views will default
+    // to drill down style views.
+    Set peApplicationStyle to wvsDrillDown   
+    Set psEncryptPassword to "C<@<dgP(UD6-x~*Vm6w+zg$0#s\}.BsBJ(07ovDF"
+
+    Object oViewStack is a cWebViewStack
+    End_Object
+    
+    Procedure HideHeader
+        WebSet pbRender of oHeaderPanel to False
+    End_Procedure
+
+    Procedure ShowHeader
+        WebSet pbRender of oHeaderPanel to True 
+    End_Procedure
+
+    Object oHeaderPanel is a cWebPanel
+        Set peRegion to prTop
+        Set psCSSClass to "HeaderPanel"
+        
+        Object oMenuPanel is a cWebPanel
+            Set peRegion to prLeft
+            Set piWidth to 50
+            
+            Object oMenuButton is a cWebMenuButton
+                Set piMenuHeight to 500
+
+                Object oDashboard_itm is a cWebMenuItem
+                    Set psCaption to C_$Dashboard
+                    
+                    WebRegisterPath ntNavigateBegin oDashboard
+
+                    Procedure OnClick
+                        Send NavigatePath
+                    End_Procedure
+                End_Object
+
+                Object oViewMenu is a cWebMenuItem
+                    Set psCaption to C_$View
+
+                    Object oDemoViewItem1 is a cWebMenuItem
+                        Set psCaption to "DemoView"
+
+                        WebRegisterPath ntNavigateBegin oDemoView
+
+                        Procedure OnClick
+                            Forward Send OnClick
+                                Send NavigatePath
+                        End_Procedure
+                    End_Object
+                End_Object
+
+                Object oSignOut_itm is a cWebMenuItem
+                    Set psCaption to C_$LogOut
+
+                    Procedure OnClick
+                        Boolean bSuccess
+                        
+                        Send RequestLogout of ghoWebSessionManager
+                    End_Procedure
+                End_Object
+            End_Object  
+
+            Object oBackButton is a cWebButton
+                Set psCSSClass to "WebBack_Icon"
+                Set pbRender to False
+                
+                Procedure OnClick
+                    Handle hoTop
+                    
+                    Get TopViewHandle of oViewStack to hoTop
+                    If (hoTop > 0) Begin
+                        Send NavigateCancel of hoTop 
+                    End
+                End_Procedure
+            End_Object
+            
+            Send AddClient of oViewStack Self
+                
+            Procedure OnUpdateViewStack
+                Handle hoTop hoDflt
+                Integer eMode
+                Boolean bTop
+                
+                WebGet peMode of ghoWebApp to eMode
+                
+                Get TopViewHandle of oViewStack to hoTop
+                Get GetDefaultView to hoDflt
+                Move (hoTop=0 or hoTop=hoDflt) to bTop
+                
+                WebSet pbRender of oBackButton to (not(bTop) and eMode >= rmMobile)
+                WebSet pbRender of oMenuButton to (bTop or eMode < rmMobile)
+            End_Procedure
+
+        End_Object
+
+        Object oCaptionPanel is a cWebPanel
+            Set piColumnCount to 12
+
+            Object oCaptionBreadcrumb is a cWebBreadcrumb
+                Set peBreadcrumbStyle to crumbCaption
+                WebSetResponsive peBreadcrumbStyle rmMobile to crumbDropDown
+            End_Object         
+        End_Object
+        
+        Object oActionPanel is a cWebPanel
+            Set peRegion to prRight
+            Set piColumnCount to 1
+            Set piWidth to 120
+
+            Object oMainActions is a cWebActionBar
+                Set psGroupName to "MainActions"
+
+                Set piColumnSpan to 0
+                Set peAlign to alignRight
+            End_Object
+        End_Object
+
+        Object oBreadcrumbPanel is a cWebPanel
+            Set peRegion to prBottom
+            
+            Object oHorizontalBreadcrumb is a cWebBreadcrumb
+                WebSetResponsive pbRender rmMobile to False
+            End_Object         
+        End_Object
+
+    End_Object    
+
+    Use SessionManager.wo
+    Use Login.wo
+    Use WebResourceManager.wo
+    
+    Use Dashboard.wo
+    Set phoDefaultView to oDashboard
+    Use SSO\CallbackHandler.wo
+    Use DemoView.wo
+    
+    Procedure OnLoad
+        Forward Send OnLoad
+        Send SsoOnLoad
+    End_Procedure
+End_Object
+
+Send StartWebApp of oWebApp
+

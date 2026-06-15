@@ -1,5 +1,13 @@
 # Demo Directory
 
+## Table of Contents
+- [Overview](#overview)
+- [Structure](#structure)
+- [Notes](#notes)
+- [Getting Started](#getting-started)
+- [Requirements](#requirements)
+- [Support](#support)
+
 This directory should include a demo DataFlex workspace that uses the library in the `Library` directory.
 
 ## Overview

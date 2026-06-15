@@ -1,0 +1,97 @@
+﻿Use cWebHttpHandler.pkg
+Use CharTranslate.pkg
+Use SSO\Structs.pkg
+
+Object oSSOCallbackHandler is a cWebHttpHandler
+    
+    Set psPath to "SSOCallback"
+    Set psVerbs to "GET"
+
+    Procedure OnHttpGet String sPath String sAcceptType
+        Handle hoStateObject
+        String sCode
+        
+        Forward Send OnHttpGet sPath sAcceptType
+        
+        Case Begin
+            Case (sPath = '/Login')
+                Send HandleLogin
+                Case Break
+            
+            Case (sPath = '/Logout')
+                Send HandleLogout
+                Case Break
+        Case End
+    End_Procedure
+    
+    Procedure HandleLogin
+        Boolean bOk bErrorRequest
+        String sCode sState sHomeUrl sError sErrDesc sStateViewHash sCodeVerifier
+        Handle hoStateObject hoApi hoProvider
+        tSsoTokenResponse TokenResponse
+        String[] aParams
+        
+        Get UrlParameter 'code' to sCode
+        Get UrlParameter 'state' to sState
+            
+        // State is optional but the library uses it in a way that it is mandatory
+        If (sCode = "" or sState = "") Begin
+            // Check for a possible error
+            Get UrlParameter 'error' to sError
+            
+            If (SizeOfString(sError) > 0) Begin
+                Move True to bErrorRequest
+                Get UrlParameter 'error_description' to sErrDesc
+                // Replace + signs with spaces (If a value really should contain '+' it should be URL encoded as '%2B')
+                Move (Replaces("+", sErrDesc, " ")) to sErrDesc
+            End
+            Else Begin
+                Error DFERR_PROGRAM "SSO provider did not return an authorization code or error."
+                Procedure_Return
+            End
+        End
+        
+        // ToDo: Swap ghoSso with hoApi?
+        If (bErrorRequest) Begin
+            Send ResolveState of ghoSso sState (&hoStateObject) (&hoProvider) (&sStateViewHash) (&sCodeVerifier)
+            Move (C_SSO_LOGIN_ERROR_PARAMETER + "=" + sErrDesc) to aParams[SizeOfArray(aParams)]
+        End
+        Else Begin
+            Get HandleCallback of ghoSso sCode sState to TokenResponse
+            If (not(TokenResponse.bSuccess)) Begin
+                Move (C_SSO_LOGIN_ERROR_PARAMETER + "=" + TokenResponse.sError) to aParams[SizeOfArray(aParams)]   
+            End
+            Move TokenResponse.sStateViewHash to sStateViewHash
+        End
+        
+        //Go back to the normal application after login
+        Get psHomeURL of ghoSso to sHomeURL
+        
+        // Add all params (might add more in the future)
+        Move (SFormat("%1/?%2", sHomeUrl, StrJoinFromArray(aParams, "&"))) to sHomeUrl
+        
+        // Add the stateview hash back to the end of the url
+        If (SizeOfString(sStateViewHash) > 0) Begin
+            Move (sHomeUrl +  "#" + sStateViewHash) to sHomeUrl
+        End
+        
+        Send AddHttpResponseHeader 'Location' sHomeURL
+        Send AddHttpResponseHeader 'cache-control' 'no-cache'
+        Send SetResponseStatus 302 'Found' 0
+    End_Procedure
+    
+    Procedure HandleLogout
+        String sState sHomeURL
+        
+        // For logout it's simply the stateview hash inside the parameter
+        Get UrlParameter C_SSO_LOGOUT_RETURN_PARAMETER to sState
+        
+        //Go back to the normal application
+        Get psHomeURL of ghoSso to sHomeURL
+        Move (sHomeURL + "/#" + sState) to sHomeURL
+        
+        Send AddHttpResponseHeader 'Location' sHomeURL
+        Send AddHttpResponseHeader 'cache-control' 'no-cache'
+        Send SetResponseStatus 302 'Found' 0
+    End_Procedure
+End_Object

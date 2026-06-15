@@ -1,0 +1,165 @@
+﻿Use cWebSessionManagerStandard.pkg
+Use SSO\cSsoState_mixin.pkg
+
+Class cSsoWebSessionManager is a cWebSessionManagerStandard
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        
+        Send Define_cSsoState_mixin
+    End_Procedure
+    
+    Import_Class_Protocol cSsoState_mixin
+    
+    { MethodType=Event }
+    // Function that maps a sso subject 
+    Function MapSsoUserInfoToLocalUser String sProviderId tSsoUserInfo UserInfo Returns String
+        Error DFERR_PROGRAM "This method (cSsoWebSessionManager.MapSsoSubToLocalUser) must be overridden."
+    End_Function
+    
+//    Function ValidateSession String sSessionKey Boolean bOptLoadWebApp Returns Boolean
+//        Boolean bValid
+//        
+//        Send SsoClearIdentity
+//        
+//        If (num_arguments >= 2) Begin
+//            Forward Get ValidateSession sSessionKey bOptLoadWebApp to bValid // Forward the ValidateSession
+//        End
+//        Else Begin
+//           Forward Get ValidateSession sSessionKey to bValid // Forward the ValidateSession 
+//        End
+//        
+//        If (bValid) Begin
+//            Send OnSsoLoadState // Load the state for each request (after the forward so the psSessionKey property is set)
+//        End
+//        
+//        Function_Return bValid
+//    End_Function
+    
+    // Pass bOptNotifyChangeRights as True when manually calling from within the WebApp
+    // When called through the CallbackHandler (cWebHttpHandler) this should be False
+    Function SsoUserLogin String sLoginName Boolean bOptNotifyChangeRights Returns Boolean
+        String sSessionKey 
+        Handle hoSessionDD hoUserDD
+        Integer iErr
+        Boolean bNotifyChangeRights
+        
+        If (num_arguments = 2) Begin
+            Move bOptNotifyChangeRights to bNotifyChangeRights
+        End
+        
+        Get phoSessionDD to hoSessionDD
+        Get phoUserDD to hoUserDD
+        
+        Get psSessionKey to sSessionKey
+        Send Clear of hoSessionDD
+        Move sSessionKey to WebAppSession.SessionKey
+        Send Find of hoSessionDD EQ 1
+        
+        If (Found and WebAppSession.SessionKey = sSessionKey) Begin
+            Send Clear of hoUserDD
+            Move sLoginName to WebAppUser.LoginName
+            Send Find of hoUserDD EQ 1
+            
+            If (Found) Begin
+                // Update the User record (LastLogin)
+                Set Field_Changed_Value of hoUserDD Field WebAppUser.LastLogin to (CurrentDateTime())
+                
+                // Update the Session record (Links Session to User via DDO Server)
+                Get Request_Validate of hoSessionDD to iErr
+                If (not(iErr)) Begin
+                    Send Request_Save of hoSessionDD
+                    
+                    // Sync the properties (psLoginName, piUserRights, etc.)
+                    Send UpdateSessionProperties False
+                    If (bNotifyChangeRights) Begin
+                        // This call is only needed when the developer manually calls this function
+                        // If the library calls it this will be called through the cWebHttpHandler which
+                        // has a different pipeline so the WebProperty system is not initialized
+                        // besides the CallbackHandler will refresh the webapp anyways...
+                        Send NotifyChangeRights
+                    End
+                    Function_Return True
+                End
+            End
+            Else Begin
+                // So administrators can find the issues with failed logins
+                Send LogErrorEvent DFERR_PROGRAM (SFormat("No account found for LoginName '%1'", sLoginName))
+            End
+        End
+    
+        Function_Return False
+    End_Function
+        
+    Function SsoLoginSuccess tSsoTokenResponse tResponse Returns tSsoTokenResponse
+        tSsoIdentity tIdentity
+        String sLoginName
+        Handle hoApi
+        Boolean bOk
+        tSsoUserInfo UserInfo
+        
+        Move tResponse.sProviderId      to tIdentity.sProviderId
+        Move tResponse.sIdToken         to tIdentity.sIdToken
+        Move tResponse.sAccessToken     to tIdentity.sAccessToken
+        Move tResponse.sRefreshToken    to tIdentity.sRefreshToken
+        Move tResponse.dtExpiresAt      to tIdentity.dtExpiresAt
+        Move tResponse.sScope           to tIdentity.sScope
+        Move tResponse.sSubject         to tIdentity.sSubject
+        
+        Set ptIdentity to tIdentity
+        
+        // Pass it through the session manager logic
+        // Find the user by SSO "username"
+        Get phoSsoApi to hoApi
+        If (hoApi = 0) Begin
+            Move False to tResponse.bSuccess
+            Move "phoSsoApi not assigned." to tResponse.sError
+            Error DFERR_PROGRAM tResponse.sError
+        End
+        Else Begin
+            Get GetSsoUserInfo of hoApi tResponse.sProviderId tResponse.sAccessToken to UserInfo
+            Get MapSsoUserInfoToLocalUser tResponse.sProviderId UserInfo to sLoginName
+            If (SizeOfString(sLoginName) > 0) Begin
+                Send OnSsoSaveState
+                Get SsoUserLogin sLoginName to tResponse.bSuccess
+                If (not(tResponse.bSuccess)) Begin
+                    Move "Login failed, please contact an administrator" to tResponse.sError // Administrators would have to check logs
+                End
+            End
+            Else Begin
+                Get SsoLoginFailed tResponse to tResponse
+            End
+        End
+        
+        Function_Return tResponse
+    End_Function
+    
+    Function SsoLoginFailed tSsoTokenResponse tResponse Returns tSsoTokenResponse
+        // ToDo: Expand this later on
+        Move False to tResponse.bSuccess
+        Move "Account not found, please link your account to use this provider as login" to tResponse.sError
+        Send LogErrorEvent DFERR_PROGRAM (SFormat("Sso login failed. Error: %1. Raw response: %2.", tResponse.sError, tResponse.sRawResponse))
+        
+        Function_Return tResponse
+    End_Function
+    
+    Procedure OnSessionPropertiesClear
+        Send SsoClearIdentity // Clear the identity prop
+    End_Procedure
+    
+    Procedure OnSessionPropertiesSet
+        Send OnSsoLoadState // Load the state
+    End_Procedure
+    
+    Procedure EndSession
+        Forward Send EndSession
+        
+        Send SsoClearIdentity
+        Send OnSsoSaveState
+    End_Procedure
+    
+    Procedure End_Construct_Object
+        Forward Send End_Construct_Object
+        
+        Send End_Construct_cSsoState_mixin
+    End_Procedure
+End_Class

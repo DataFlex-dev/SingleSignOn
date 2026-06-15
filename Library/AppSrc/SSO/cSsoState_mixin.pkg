@@ -1,0 +1,174 @@
+Use VdfBase.pkg
+Use SSO\Sso.pkg
+
+Class cSsoState_mixin is a Mixin
+    Procedure Define_cSsoState_mixin
+        
+        // In windows the properties are always synchronized since it's one process
+        // In Web the properties should be serialized 
+        { Visibility=Private }
+        Property tSsoIdentity ptIdentity
+        
+        Send Define_cSsoStateBase_mixin
+    End_Procedure
+    
+    Import_Class_Protocol cSsoStateBase_mixin
+    
+    Procedure End_Construct_cSsoState_mixin
+        Send End_Construct_cSsoStateBase_mixin
+    End_Procedure
+    
+    Function CurrentProviderId Returns String
+        tSsoIdentity tIdentity
+        
+        Get ptIdentity to tIdentity
+        
+        Function_Return tIdentity.sProviderId
+    End_Function
+
+    Procedure IdentityLogout Boolean bOptReturnToStateViewHash
+        Handle hoApi
+        tSsoIdentity tIdentity
+        Boolean bOk bReturnToStateViewHash
+        String sStateHash
+        
+        If (num_arguments > 0) Begin
+            Move bOptReturnToStateViewHash to bReturnToStateViewHash
+        End
+        
+        Get ApiHandle to hoApi
+        Get ptIdentity to tIdentity
+        
+        If (hoApi <> 0) Begin
+            If (bReturnToStateViewHash) Begin
+                #IFDEF Is$WebApp
+                    Get StateHash of ghoWebApp to sStateHash
+                #ENDIF
+            End
+            
+            Send IdentityLogout of hoApi Self tIdentity.sProviderId sStateHash
+        End
+
+        Send SsoClearIdentity
+        Send OnSsoSaveState
+        Send OnSsoLogoutSuccess
+    End_Procedure
+
+    Function SsoActiveIdentity tSsoIdentity ByRef tIdentity Returns Boolean
+        If (SsoIsLoggedIn(Self)) Begin
+            Get ptIdentity to tIdentity
+            Function_Return True
+        End
+        
+        Function_Return False
+    End_Function
+    
+    Function GetIdToken String sProviderId Returns String
+        tSsoIdentity tIdentity
+        
+        Get ptIdentity to tIdentity
+        
+        If (tIdentity.sProviderId = sProviderId) ;
+            Function_Return tIdentity.sIdToken
+        Else ;
+            Function_Return ""
+    End_Function
+    
+    Function GetAccessToken String sProviderId Returns String
+        tSsoIdentity tIdentity
+        
+        Get ptIdentity to tIdentity
+        
+        If (tIdentity.sProviderId = sProviderId) ;
+            Function_Return tIdentity.sAccessToken
+        Else ;
+            Function_Return ""
+    End_Function
+    
+    Function GetRefreshToken String sProviderId Returns String
+        tSsoIdentity tIdentity
+        
+        Get ptIdentity to tIdentity
+        
+        If (tIdentity.sProviderId = sProviderId) ;
+            Function_Return tIdentity.sRefreshToken
+        Else ;
+            Function_Return ""
+    End_Function
+    
+    Function ValidateAccessToken Returns Boolean
+        DateTime dtNow
+        tSsoIdentity tIdentity
+        Boolean bValid
+        Handle hoApi
+        
+        Move (CurrentDateTime()) to dtNow
+        Get ptIdentity to tIdentity
+        If (IsNullDateTime(tIdentity.dtExpiresAt)) Begin
+            // Check JWT
+            Get ApiHandle to hoApi
+            If (hoApi <> 0) Begin
+                Get ValidateAccessToken of hoApi tIdentity.sProviderId tIdentity.sAccessToken to bValid
+            End
+        End
+        Else Begin
+            // Use identity expiresAt and assume JWT is still valid 
+            // (EntraID only allows ID tokens to validated locally because access tokens are opaque.
+            // This means that for EntraID ValidateAccessToken of hoApi will always fail (signature verification fails)
+            Move (tIdentity.dtExpiresAt > dtNow) to bValid
+        End
+        
+        Function_Return bValid
+    End_Function
+    
+    Function RefreshTokens Returns tSsoTokenResponse
+        Handle hoApi
+        tSsoTokenResponse TokenResponse
+        tSsoIdentity tIdentity
+        
+        Get ApiHandle to hoApi
+        If (hoApi <> 0) Begin
+            Get ptIdentity to tIdentity
+            Get RefreshTokens of hoApi tIdentity.sProviderId tIdentity.sRefreshToken tIdentity.sScope to TokenResponse
+            
+            If (TokenResponse.bSuccess) Begin
+                // Set the new tokens as identity
+                Move TokenResponse.sProviderId      to tIdentity.sProviderId
+                Move TokenResponse.sAccessToken     to tIdentity.sAccessToken
+                Move TokenResponse.dtExpiresAt      to tIdentity.dtExpiresAt
+                Move TokenResponse.sIdToken         to tIdentity.sIdToken
+                Move TokenResponse.sRefreshToken    to tIdentity.sRefreshToken
+                Move TokenResponse.sScope           to tIdentity.sScope
+                Move TokenResponse.sSubject         to tIdentity.sSubject
+                
+                Set ptIdentity to tIdentity
+                Send OnSsoSaveState
+            End
+        End
+        
+        Function_Return TokenResponse
+    End_Function
+    
+    Function GetSsoUserInfo Returns tSsoUserInfo
+        Handle hoApi
+        tSsoIdentity tIdentity
+        tSsoUserInfo UserInfo
+        
+        Get ApiHandle to hoApi
+        If (hoApi <> 0) Begin
+            Get ptIdentity to tIdentity
+            If (tIdentity.sProviderId <> "") Begin
+                Get GetSsoUserInfo of hoApi tIdentity.sProviderId tIdentity.sAccessToken to UserInfo
+            End
+        End
+        
+        Function_Return UserInfo
+    End_Function
+
+    { Visibility=Private }
+    Procedure SsoClearIdentity
+        tSsoIdentity tEmpty
+
+        Set ptIdentity to tEmpty
+    End_Procedure
+End_Class

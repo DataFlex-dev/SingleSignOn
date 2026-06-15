@@ -1,0 +1,160 @@
+#IFNDEF C_OPENSSL_DLL_NAME
+    #IFDEF IS$WIN64
+        Define C_OPENSSL_DLL_NAME for libcrypto-3-x64.dll
+    #ELSE
+        Define C_OPENSSL_DLL_NAME for libcrypto-3.dll
+    #ENDIF 
+#ENDIF
+
+// OpenSSL constants
+// Common public exponent value
+Define RSA_F4 for 65537
+// BIO Method for memory buffer
+Define BIO_METHOD_s_mem for 1
+Define NID_rsaEncryption for 6
+    
+//-------------------------
+// BIGNUM Functions
+//-------------------------
+// Converts a byte array into a new BIGNUM
+// BIGNUM *BN_bin2bn(const unsigned char *s, int len, BIGNUM *ret);
+#IFNDEF Get_OpenSSL_BN_bin2bn
+External_Function OpenSSL_BN_bin2bn "BN_bin2bn" C_OPENSSL_DLL_NAME ;
+    Pointer pInput        ;// AddressOf(byte array)
+    Integer iLength       ;// length of byte array
+    Pointer pBignum       ;// optional preallocated BIGNUM (0 = allocate new)
+    Returns Pointer        // returns a pointer to the BIGNUM
+#ENDIF
+
+// Frees a BIGNUM
+// void BN_free(BIGNUM *a);
+#IFNDEF Get_OpenSSL_BN_free
+External_Function OpenSSL_BN_free "BN_free" C_OPENSSL_DLL_NAME ;
+    Pointer pBignum       ;
+    Returns Void_Type
+#ENDIF
+
+//-------------------------
+// EVP_PKEY Functions
+//-------------------------
+// Allocates a new EVP_PKEY structure
+// EVP_PKEY *EVP_PKEY_new(void);
+#IFNDEF Get_OpenSSL_EVP_PKEY_new
+External_Function OpenSSL_EVP_PKEY_new "EVP_PKEY_new" C_OPENSSL_DLL_NAME ;
+    Returns Pointer
+#ENDIF
+
+// Frees an EVP_PKEY structure
+// void EVP_PKEY_free(EVP_PKEY *key);
+#IFNDEF Get_OpenSSL_EVP_PKEY_free
+External_Function OpenSSL_EVP_PKEY_free "EVP_PKEY_free" C_OPENSSL_DLL_NAME ;
+    Pointer pKey         ;
+    Returns Void_Type
+#ENDIF
+
+//-------------------------
+// RSA Functions
+//-------------------------
+// Allocates a new RSA structure
+// RSA *RSA_new(void);
+#IFNDEF Get_OpenSSL_RSA_new
+External_Function OpenSSL_RSA_new "RSA_new" C_OPENSSL_DLL_NAME ;
+    Returns Pointer
+#ENDIF
+
+// Frees an RSA structure
+// void RSA_free(RSA *rsa);
+#IFNDEF Get_OpenSSL_RSA_free
+External_Function OpenSSL_RSA_free "RSA_free" C_OPENSSL_DLL_NAME ;
+    Pointer pRSA         ;
+    Returns Void_Type
+#ENDIF
+
+// Sets the modulus, public exponent, and private exponent for an RSA key
+// int RSA_set0_key(RSA *r, BIGNUM *n, BIGNUM *e, BIGNUM *d);
+#IFNDEF Get_OpenSSL_RSA_set0_key
+External_Function OpenSSL_RSA_set0_key "RSA_set0_key" C_OPENSSL_DLL_NAME ;
+    Pointer pRSA         ;
+    Pointer pN           ;
+    Pointer pE           ;
+    Pointer pD           ;
+    Returns Integer
+#ENDIF
+
+// Assigns an RSA structure to an EVP_PKEY (increments reference count)
+// int EVP_PKEY_set1_RSA(EVP_PKEY *pkey, RSA *rsa);
+#IFNDEF Get_OpenSSL_EVP_PKEY_set1_RSA
+External_Function OpenSSL_EVP_PKEY_set1_RSA "EVP_PKEY_set1_RSA" C_OPENSSL_DLL_NAME ;
+    Pointer pPKey        ;// EVP_PKEY* pointer
+    Pointer pRSA         ;// RSA* pointer
+    Returns Integer       // 1 = success, 0 = failure
+#ENDIF
+
+//-------------------------
+// BIO (memory buffer) Functions
+//-------------------------
+// Returns the BIO method for memory buffers
+// const BIO_METHOD *BIO_s_mem(void);
+#IFNDEF Get_OpenSSL_BIO_s_mem
+External_Function OpenSSL_BIO_s_mem "BIO_s_mem" C_OPENSSL_DLL_NAME ;
+    Returns Pointer
+#ENDIF
+
+// Creates a new BIO using the specified method
+// BIO *BIO_new(const BIO_METHOD *type);
+#IFNDEF Get_OpenSSL_BIO_new
+External_Function OpenSSL_BIO_new "BIO_new" C_OPENSSL_DLL_NAME ;
+    Pointer pMethod      ;
+    Returns Pointer
+#ENDIF
+
+// Frees a BIO
+// int BIO_free(BIO *a);
+#IFNDEF Get_OpenSSL_BIO_free
+External_Function OpenSSL_BIO_free "BIO_free" C_OPENSSL_DLL_NAME ;
+    Pointer pBio         ;
+    Returns Integer
+#ENDIF
+
+// Returns the number of bytes pending to read from the BIO
+// long BIO_ctrl_pending(BIO *b);
+#IFNDEF Get_OpenSSL_BIO_ctrl_pending
+External_Function OpenSSL_BIO_ctrl_pending "BIO_ctrl_pending" C_OPENSSL_DLL_NAME ;
+    Pointer pBio         ;
+    Returns Integer
+#ENDIF
+
+// Reads data from the BIO
+// int BIO_read(BIO *b, void *data, int len);
+#IFNDEF Get_OpenSSL_BIO_read
+External_Function OpenSSL_BIO_read "BIO_read" C_OPENSSL_DLL_NAME ;
+    Pointer pBio         ;
+    Pointer pBuf         ;
+    Integer iLen         ;
+    Returns Integer
+#ENDIF
+
+//-------------------------
+// PEM Write Functions
+//-------------------------
+// Writes a public key in PEM format to the BIO
+// int PEM_write_bio_PUBKEY(BIO *bp, EVP_PKEY *x);
+#IFNDEF Get_OpenSSL_PEM_write_bio_PUBKEY
+External_Function OpenSSL_PEM_write_bio_PUBKEY "PEM_write_bio_PUBKEY" C_OPENSSL_DLL_NAME ;
+    Pointer pBio         ;
+    Pointer pKey         ;
+    Returns Integer
+#ENDIF
+
+//-------------------------
+// Memory allocation/free
+//-------------------------
+// Frees memory allocated by OpenSSL
+// void CRYPTO_free(void *ptr, const char *file, int line);
+#IFNDEF Get_OpenSSL_CRYPTO_free
+External_Function OpenSSL_CRYPTO_free "CRYPTO_free" C_OPENSSL_DLL_NAME ;
+    Pointer pAddr        ; 
+    Pointer pFile        ;// can be 0
+    Integer iLine        ;
+    Returns Void_Type
+#ENDIF

@@ -1,0 +1,380 @@
+﻿Use cWebView.pkg
+Use cWebPanel.pkg
+Use cWebForm.pkg 
+Use cWebCombo.pkg
+Use cWebButton.pkg
+Use cWebTabContainer.pkg
+Use cWebTabPage.pkg
+
+Use SSO\Sso.pkg
+Use cSsoStateDataDictionary.dd
+
+Class cDemoStateObject is a cWebObject
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        
+        Send Define_cSsoState_mixin
+    End_Procedure
+    
+    Import_Class_Protocol cSsoState_mixin
+    
+    Function SsoLoginSuccess tSsoTokenResponse tResponse Returns tSsoTokenResponse
+        tSsoIdentity tIdentity
+        
+        Send ShowInfoBox (SFormat("Succesfully logged in with provider '%1' as subject '%2'", Trim(tResponse.sProviderId), Trim(tResponse.sSubject))) "Login successful"
+        Move tResponse.sProviderId      to tIdentity.sProviderId
+        Move tResponse.sSubject         to tIdentity.sSubject
+        Move tResponse.sIdToken         to tIdentity.sIdToken
+        Move tResponse.sAccessToken     to tIdentity.sAccessToken
+        Move tResponse.dtExpiresAt      to tIdentity.dtExpiresAt
+        Move tResponse.sRefreshToken    to tIdentity.sRefreshToken
+        Move tResponse.sScope           to tIdentity.sScope
+        
+        Set ptIdentity to tIdentity
+        Send OnSsoSaveState
+        
+        Function_Return tResponse
+    End_Function
+    
+    Function SsoLoginFailed tSsoTokenResponse tResponse Returns tSsoTokenResponse
+        Send SsoClearIdentity
+        Send OnSsoSaveState
+        
+        Function_Return tResponse
+    End_Function
+    
+    Procedure OnSsoLoadState
+        String sSessionKey sExpiresAtTime
+        tSsoIdentity tIdentity
+        
+        Get ReadSessionKey of ghoWebApp to sSessionKey
+        If (SizeOfString(sSessionKey) > 0) Begin
+            Send Clear of oSsoState_DD
+            Move sSessionKey to SsoState.SessionKey
+            Move (psStateKey(Self)) to SsoState.StateKey
+            Send Find of oSsoState_DD EQ 1
+            
+            If (Found) Begin
+                Move SsoState.ProviderId    to tIdentity.sProviderId
+                Move SsoState.Subject       to tIdentity.sSubject
+                Move SsoState.AccessToken   to tIdentity.sAccessToken
+                Move SsoState.RefreshToken  to tIdentity.sRefreshToken
+                Move SsoState.Scopes        to tIdentity.sScope
+                Move SsoState.ExpiresAtDate to tIdentity.dtExpiresAt
+                Move SsoState.ExpiresAtTime to sExpiresAtTime
+                Get StringToTime of oSsoState_DD tIdentity.dtExpiresAt sExpiresAtTime to tIdentity.dtExpiresAt
+            End
+        End
+        
+        Set ptIdentity to tIdentity
+    End_Procedure
+    
+    Procedure OnSsoSaveState
+        String sSessionKey
+        tSsoIdentity tIdentity
+        Boolean bErr
+        
+        Get ReadSessionKey of ghoWebApp to sSessionKey
+        If (SizeOfString(sSessionKey) > 0) Begin
+            Send Clear of oSsoState_DD
+            Move sSessionKey to SsoState.SessionKey
+            Move (psStateKey(Self)) to SsoState.StateKey
+            Send Find of oSsoState_DD EQ 1
+            
+            // If found we overwrite the existing record, otherwise create a new one
+            If (not(Found)) Begin
+                Set Field_Changed_Value of oSsoState_DD Field SsoState.SessionKey   to sSessionKey
+                Set Field_Changed_Value of oSsoState_DD Field SsoState.StateKey     to (psStateKey(Self))
+            End
+            
+            Get ptIdentity to tIdentity
+            Set Field_Changed_Value of oSsoState_DD Field SsoState.ProviderId       to tIdentity.sProviderId
+            Set Field_Changed_Value of oSsoState_DD Field SsoState.Subject          to tIdentity.sSubject
+            Set Field_Changed_Value of oSsoState_DD Field SsoState.AccessToken      to tIdentity.sAccessToken
+            Set Field_Changed_Value of oSsoState_DD Field SsoState.RefreshToken     to tIdentity.sRefreshToken
+            Set Field_Changed_Value of oSsoState_DD Field SsoState.Scopes           to tIdentity.sScope
+            
+            Send SetExpiration of oSsoState_DD tIdentity.dtExpiresAt 
+            
+            Get Request_Validate of oSsoState_DD to bErr
+            If (not(bErr)) Begin
+                Send Request_Save of oSsoState_DD
+            End
+        End
+    End_Procedure
+    
+    Procedure End_Construct_Object
+        Forward Send End_Construct_Object
+        
+        Send End_Construct_cSsoState_mixin
+    End_Procedure
+End_Class
+
+Class cDemoStateForm is a cWebForm
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        
+        Set pbReadOnly to True
+        Set peLabelPosition to lpTop
+    End_Procedure
+End_Class
+
+Object oDemoView is a cWebView
+    Object oSsoState_DD is a cSsoStateDataDictionary
+    End_Object
+
+    Set Main_DD to oSsoState_DD
+    Set Server to oSsoState_DD
+
+    Set piWidth to 700
+    Set psCaption to "DemoView"
+    
+    Object oStateObject1 is a cDemoStateObject
+        Set psStateKey to "DemoObject1"
+        
+        Procedure OnSsoLogoutSuccess
+            Send LoadStates // Reloads the states
+        End_Procedure
+    End_Object
+
+    Object oStateObject2 is a cDemoStateObject
+        Set psStateKey to "DemoObject2"
+        
+        Procedure OnSsoLogoutSuccess
+            Send LoadStates
+        End_Procedure
+    End_Object
+    
+    Object oWebMainPanel is a cWebPanel
+        Set piColumnCount to 12
+        
+        Object oWcProviders is a cWebCombo
+            Set piColumnSpan to 4
+            Set peLabelPosition to lpTop
+            Set psLabel to "Provider"
+            Set piColumnIndex to 0
+            Set peSortItems to csDescription
+            
+            Procedure OnFill
+                Handle[] hoaProviders
+                Integer iIndex iIndexTo
+                String sProviderId
+                
+                Get phoaProviders of ghoSso to hoaProviders
+                Move (SizeOfArray(hoaProviders) - 1) to iIndexTo
+                
+                For iIndex from 0 to iIndexTo
+                    Get psProviderID of hoaProviders[iIndex] to sProviderId
+                    
+                    Send AddComboItem sProviderId sProviderId
+                Loop
+            End_Procedure
+        End_Object
+        
+        Object oWcPrompt is a cWebCombo
+            Set piColumnSpan to 4
+            Set piColumnIndex to 4
+            Set peLabelPosition to lpTop
+            Set psLabel to "Prompt parameter"
+            
+            Procedure OnFill
+                Send AddComboItem "" "Default"
+                Send AddComboItem "none"    "None"
+                Send AddComboItem "login"   "Require login"
+                Send AddComboItem "consent" "Require consent"
+                Send AddComboItem "login consent" "Require login + consent"
+                Send AddComboItem "select_account" "Require account selection (might not be supported)"
+            End_Procedure
+        End_Object
+        
+        Object oLoginButton is a cWebButton
+            Set psCaption to "Login (current state tab)"
+            Set piColumnSpan to 4
+            Set piColumnIndex to 0
+            
+            Procedure OnClick
+                String sProviderId sPrompt
+                Handle hoCurrentPage hoStateObject
+            
+                WebGet psValue of oWcProviders to sProviderId
+                If (SizeOfString(sProviderId) = 0) Begin
+                    Send ShowInfoBox "No provider selected"
+                    Procedure_Return
+                End
+                
+                Get CurrentCard of oStateVisualizerTabs to hoCurrentPage
+                
+                If (hoCurrentPage = oState1Tab) Begin
+                    Move oStateObject1 to hoStateObject
+                End
+                
+                If (hoCurrentPage = oState2Tab) Begin
+                    Move oStateObject2 to hoStateObject    
+                End
+                
+                WebGet psValue of oWcPrompt to sPrompt
+                Send IdentityLogin of hoStateObject sProviderId True sPrompt
+            End_Procedure
+        End_Object
+        
+        Object oLogoutButton is a cWebButton
+            Set psCaption to "Logout (current state tab)"
+            Set piColumnSpan to 4
+            Set piColumnIndex to 4
+            
+            Procedure OnClick
+                Handle hoCurrentPage hoStateObject
+                
+                Get CurrentCard of oStateVisualizerTabs to hoCurrentPage
+                
+                If (hoCurrentPage = oState1Tab) Begin
+                    Move oStateObject1 to hoStateObject
+                End
+                
+                If (hoCurrentPage = oState2Tab) Begin
+                    Move oStateObject2 to hoStateObject    
+                End
+                
+                Send LogOutForStateObject hoStateObject
+            End_Procedure
+        End_Object
+        
+        Object oRefreshStates is a cWebButton
+            Set psCaption to "Refresh states"
+            Set piColumnSpan to 4
+            Set piColumnIndex to 0
+            
+            Procedure OnClick
+                Send LoadStates
+            End_Procedure
+        End_Object
+        
+        Object oStateVisualizerTabs is a cWebTabContainer
+            Set pbFillHeight to True
+            Set pbShowBorder to False
+            
+            Object oState1Tab is a cWebTabPage
+                Set psCaption to "State 1"
+                
+                Object oState1LoggedIn is a cDemoStateForm
+                    Set psLabel to "Logged in:"
+                End_Object
+                
+                Object oState1ProviderId is a cDemoStateForm
+                    Set psLabel to "Provider:"
+                End_Object
+                
+                Object oState1Subject is a cDemoStateForm
+                    Set psLabel to "Subject:"
+                End_Object
+                
+                Object oState1IdToken is a cDemoStateForm
+                    Set psLabel to "Id token:"
+                    Set psValue to "<Only relevant on first request>"
+                End_Object
+                
+                Object oState1AccessToken is a cDemoStateForm
+                    Set psLabel to "Access token:"
+                End_Object
+                
+                Object oState1RefreshToken is a cDemoStateForm
+                    Set psLabel to "Refresh token:"
+                End_Object
+                
+                Object oState1Scope is a cDemoStateForm
+                    Set psLabel to "Scope(s):"
+                End_Object
+                
+                Object oState1ExpiresAt is a cDemoStateForm
+                    Set psLabel to "Expires at:"
+                End_Object
+            End_Object
+            
+            Object oState2Tab is a cWebTabPage
+                Set psCaption to "State 2"
+                
+                Set psCaption to "State 2"
+                
+                Object oState2LoggedIn is a cDemoStateForm
+                    Set psLabel to "Logged in:"
+                End_Object
+                
+                Object oState2ProviderId is a cDemoStateForm
+                    Set psLabel to "Provider:"
+                End_Object
+                
+                Object oState2Subject is a cDemoStateForm
+                    Set psLabel to "Subject:"
+                End_Object
+                
+                Object oState2IdToken is a cDemoStateForm
+                    Set psLabel to "Id token:"
+                    Set psValue to "<Only relevant on first request>"
+                End_Object
+                
+                Object oState2AccessToken is a cDemoStateForm
+                    Set psLabel to "Access token:"
+                End_Object
+                
+                Object oState2RefreshToken is a cDemoStateForm
+                    Set psLabel to "Refresh token:"
+                End_Object
+                
+                Object oState2Scope is a cDemoStateForm
+                    Set psLabel to "Scope(s):"
+                End_Object
+                
+                Object oState2ExpiresAt is a cDemoStateForm
+                    Set psLabel to "Expires at:"
+                End_Object
+            End_Object
+        End_Object
+        
+    End_Object 
+    
+    Procedure LogOutForStateObject Handle hoStateObject
+        Boolean bLoggedIn
+        tSsoIdentity tIdentity
+        
+        Get SsoActiveIdentity of hoStateObject (&tIdentity) to bLoggedIn
+        If (bLoggedIn) Begin
+            Send IdentityLogout of hoStateObject True
+        End
+    End_Procedure
+    
+    Procedure OnBeforeShow
+        Send LoadStates
+    End_Procedure
+    
+    Procedure LoadStates
+        tSsoIdentity tIdentity1 tIdentity2
+        Boolean bLoggedIn1 bLoggedIn2
+        
+        // Load data into objects
+        Send OnSsoLoadState of oStateObject1
+        Send OnSsoLoadState of oStateObject2
+        
+        // Load data into forms
+        // State object 1
+        Get SsoActiveIdentity of oStateObject1 (&tIdentity1) to bLoggedIn1
+        
+        WebSet psValue of oState1LoggedIn       to (If(bLoggedIn1, "True", "False"))
+        WebSet psValue of oState1ProviderId     to (Trim(tIdentity1.sProviderId))
+        WebSet psValue of oState1Subject        to (Trim(tIdentity1.sSubject))
+        WebSet psValue of oState1AccessToken    to (Trim(tIdentity1.sAccessToken))
+        WebSet psValue of oState1RefreshToken   to (Trim(tIdentity1.sRefreshToken))
+        WebSet psValue of oState1Scope          to (Trim(tIdentity1.sScope))
+        WebSet psValue of oState1ExpiresAt      to (Trim(tIdentity1.dtExpiresAt))
+        
+        // State object 2
+        Get SsoActiveIdentity of oStateObject2 (&tIdentity2) to bLoggedIn2
+        
+        WebSet psValue of oState2LoggedIn       to (If(bLoggedIn2, "True", "False"))
+        WebSet psValue of oState2ProviderId     to (Trim(tIdentity2.sProviderId))
+        WebSet psValue of oState2Subject        to (Trim(tIdentity2.sSubject))
+        WebSet psValue of oState2AccessToken    to (Trim(tIdentity2.sAccessToken))
+        WebSet psValue of oState2RefreshToken   to (Trim(tIdentity2.sRefreshToken))
+        WebSet psValue of oState2Scope          to (Trim(tIdentity2.sScope))
+        WebSet psValue of oState2ExpiresAt      to (Trim(tIdentity2.dtExpiresAt))
+    End_Procedure
+End_Object

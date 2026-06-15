@@ -1,0 +1,20 @@
+﻿Use VdfBase.pkg
+Use SSO\URI.pkg
+
+Class cSsoOnLoad_mixin is a Mixin
+    Procedure SsoOnLoad
+        String sError sUrl sStateHash
+        
+        // Check for an error and show
+        Get UrlParameter C_SSO_LOGIN_ERROR_PARAMETER to sError
+        
+        If (SizeOfString(sError) > 0) Begin
+            Send UserError sError "Login failed"
+            // Remove the query parameters
+            Get psHomeURL of ghoSso to sUrl
+            Get StateHash of ghoWebApp to sStateHash
+            Move (sUrl + "/#" + sStateHash) to sUrl
+            Send HistoryReplaceState of ghoWebApp sUrl
+        End
+    End_Procedure
+End_Class

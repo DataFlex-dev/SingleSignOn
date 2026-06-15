@@ -1,0 +1,11 @@
+SessionKey
+StateKey
+ProviderId
+Subject
+AccessToken
+RefreshToken
+Scopes
+ExpiresAtDate
+ExpiresAtTime
+UpdatedAtDate
+UpdateAtTime

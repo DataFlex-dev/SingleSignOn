@@ -1,0 +1,340 @@
+﻿Use cHttpTransfer.pkg
+Use SSO\Sso.pkg
+Use JWT\JWT.pkg
+
+Class cSSORequestSender is a cHttpTransfer
+    
+    Procedure Construct_Object
+        Handle hoURIParser
+        
+        Forward Send Construct_Object
+        
+        Property Handle     phoURIParser
+        
+        Property String     psSsoHost
+        Property String     psResultData
+        //Client Authentication
+        Property Boolean    pbPublicClient
+        Property String     psIdentityClientId
+        Property String     psIdentityClientSecret
+        //Endpoints    
+        Property String     psDiscoveryEndpoint     
+        Property String     psTokenEndpoint
+        Property String     psIntrospectEndpoint
+        Property String     psUserInfoEndpoint
+        Property String     psTokenRevocationEndpoint
+        Property String     psJWKSEndpoint
+        
+        Set pbShowErrorDialog to True
+        
+        Get Create (RefClass(cURIParser)) to hoURIParser
+        Set phoURIParser to hoURIParser
+    End_Procedure
+    
+    Procedure RequestSetup String ByRef sFilePath
+        String sSsoHost sRemoteHost sParsedHost
+        Handle hoURIParser
+        Boolean bRelative
+        Integer iRemotePos
+        
+        Get psSSOHost    to sSsoHost
+        Get psRemoteHost to sRemoteHost
+        Get phoURIParser to hoURIParser
+        
+        Send ParseURI of hoURIParser sFilePath
+        Get psHost of hoURIParser to sParsedHost
+        
+        Move (SizeOfString(sParsedHost) = 0) to bRelative
+        If (bRelative) Begin
+            // Check current host
+            Move (Pos(sRemoteHost, sSsoHost, 1)) to iRemotePos
+            
+            // iRemotePos should be 8 or 9 (starting right after the protocol), otherwise it's a different host and we need to setup the original host
+            If (iRemotePos <> 8 and iRemotePos <> 9) Begin
+                Send SetupHost sSsoHost
+            End 
+        End
+        Else Begin
+            // Absolute URI, move path to sFilePath
+            Get PathAsString of hoURIParser to sFilePath
+            
+            // Uri could contain a different host, If so we need to setup the new host
+            If (sParsedHost <> sRemoteHost) Begin
+                Send SetupHost (psScheme(hoURIParser) + "://" + sParsedHost)
+            End
+        End
+    End_Procedure
+
+    Function SSORequestToken String sCode String sRedirectURI String sOptCodeVerifier Returns Boolean
+        Boolean bPublic
+        Integer iReturnValue
+        String sFilePath sData sClientId sClientSecret sAuthorizationHeader
+        
+        Get pbPublicClient to bPublic
+        Get psIdentityClientId to sClientId
+        Get psIdentityClientSecret to sClientSecret
+        Get psTokenEndpoint to sFilePath
+        
+        Send RequestSetup (&sFilePath)
+        
+        //Construct body data
+        Move (SFormat('grant_type=authorization_code&code=%1&redirect_uri=%2',;
+                sCode,;
+                sRedirectURI)) to sData
+        
+        // Add code verifier if passed to function
+        If (num_arguments > 2) Begin
+            Move (sData + "&code_verifier=" + sOptCodeVerifier) to sData    
+        End
+        
+        //Adding the Headers    
+        Send ClearHeaders    
+        If (bPublic) Begin
+            // Add client_id parameter
+            Move (sData + "&client_id=" + sClientId) to sData    
+        End
+        Else Begin
+            //Construct Authorization Header
+            Get g_Base64EncodeStr (sClientId + ':' + sClientSecret) to sAuthorizationHeader
+            Move ('Basic ' + sAuthorizationHeader) to sAuthorizationHeader
+            Get AddHeader 'Authorization' sAuthorizationHeader to iReturnValue
+        End
+        
+        Get AddHeader 'Content-Type' 'application/x-www-form-urlencoded' to iReturnValue
+        //Sending the Post request, Data is collected in OnDataReceived.
+        Get HttpPostRequest sFilePath sData False to iReturnValue
+        Function_Return (iReturnValue <> 0)
+    End_Function
+    
+    Function SSOIntrospectToken String sToken String sOptTokenTypeHint Returns Boolean
+        Boolean bPublic
+        String sClientId sClientSecret sAuthorizationHeader sFilePath sData 
+        Integer iReturnValue
+        
+        Get pbPublicClient to bPublic
+        Get psIdentityClientId to sClientId
+        Get psIdentityClientSecret to sClientSecret
+        Get psIntrospectEndpoint to sFilePath
+        
+        Send RequestSetup (&sFilePath)
+
+        Move ("token=" + sToken) to sData
+        If (num_arguments > 1) Begin
+            Move (sData + "&token_type_hint=" + sOptTokenTypeHint) to sData
+        End
+                     
+        //Adding the Headers
+        Send ClearHeaders
+        
+        If (bPublic) Begin
+            // Add client_id parameter
+            Move (sData + SFormat('&client_id=%1', sClientId)) to sData    
+        End
+        Else Begin
+            //Construct Authorization Header
+            Get g_Base64EncodeStr (sClientId + ':' + sClientSecret) to sAuthorizationHeader
+            Move ('Basic ' + sAuthorizationHeader) to sAuthorizationHeader
+            Get AddHeader 'Authorization' sAuthorizationHeader to iReturnValue
+        End
+        
+        Get AddHeader 'Content-Type' 'application/x-www-form-urlencoded' to iReturnValue
+        Get AddHeader 'Accept' 'application/json' to iReturnValue
+        //Sending the Post request, Data is collected in OnDataReceived.
+        Get HttpPostRequest sFilePath sData False to iReturnValue
+        Function_Return (iReturnValue <> 0)
+    End_Function
+    
+    Function SSORefreshToken String sRefreshToken String sScope Returns Boolean
+        Boolean bPublic
+        String sClientId sClientSecret sAuthorizationHeader sFilePath sData
+        Integer iReturnValue
+        
+        Get pbPublicClient to bPublic
+        Get psIdentityClientId to sClientId
+        Get psIdentityClientSecret to sClientSecret
+        Get psTokenEndpoint to sFilePath
+        
+        Send RequestSetup (&sFilePath)
+
+        //Construct body data
+        Move (SFormat('grant_type=refresh_token&refresh_token=%1&scope=%2',;
+                sRefreshToken,;
+                sScope)) to sData      
+        Move (Replaces(' ', sData, '%20')) to sData
+               
+        //Adding the Headers
+        Send ClearHeaders        
+        If (bPublic) Begin
+            // Add client_id parameter
+            Move (sData + SFormat('&client_id=%1', sClientId)) to sData    
+        End
+        Else Begin
+            //Construct Authorization Header
+            Get g_Base64EncodeStr (sClientId + ':' + sClientSecret) to sAuthorizationHeader
+            Move ('Basic ' + sAuthorizationHeader) to sAuthorizationHeader
+            Get AddHeader 'Authorization' sAuthorizationHeader to iReturnValue
+        End
+        
+        Get AddHeader 'Content-Type' 'application/x-www-form-urlencoded' to iReturnValue
+        Get AddHeader 'Accept' 'application/json' to iReturnValue
+        //Sending the Post request, Data is collected in OnDataReceived.
+        Get HttpPostRequest sFilePath sData False to iReturnValue
+        Function_Return (iReturnValue <> 0)
+    End_Function
+    
+    Function RevokeAccessToken String sAccessToken Returns Boolean
+        Boolean bPublic
+        String sFilePath sClientId sClientSecret sData sAuthorizationHeader
+        Integer iReturnValue
+        
+        Get pbPublicClient to bPublic 
+        Get psIdentityClientId to sClientId
+        Get psIdentityClientSecret to sClientSecret
+        Get psTokenRevocationEndpoint to sFilePath
+        
+        Send RequestSetup (&sFilePath)
+        
+        //Construct body data
+        Move (SFormat('token=%1&token_type_hint=access_token',;
+                sAccessToken)) to sData
+        
+        //Adding the headers
+        Send ClearHeaders        
+        If (bPublic) Begin
+            // Add client_id parameter
+            Move (sData + SFormat('&client_id=%1', sClientId)) to sData    
+        End
+        Else Begin
+            //Construct Authorization Header
+            Get g_Base64EncodeStr (sClientId + ':' + sClientSecret) to sAuthorizationHeader
+            Move ('Basic ' + sAuthorizationHeader) to sAuthorizationHeader
+            Get AddHeader 'Authorization' sAuthorizationHeader to iReturnValue
+        End
+        
+        Get AddHeader 'Content-Type' 'application/x-www-form-urlencoded' to iReturnValue
+        
+        Get HttpPostRequest sFilePath sData False to iReturnValue
+        Function_Return (iReturnValue <> 0)
+    End_Function
+    
+    Function RevokeRefreshToken String sRefreshToken Returns Boolean
+        Boolean bPublic
+        String sFilePath sClientId sClientSecret sData sAuthorizationHeader
+        Integer iReturnValue
+        
+        Get pbPublicClient to bPublic
+        Get psIdentityClientId to sClientId
+        Get psIdentityClientSecret to sClientSecret
+        Get psTokenRevocationEndpoint to sFilePath
+        
+        Send RequestSetup (&sFilePath)
+        
+        //Construct body data
+        Move (SFormat('token=%1&token_type_hint=refresh_token',;
+                sRefreshToken)) to sData
+        
+        //Adding the headers
+        Send ClearHeaders        
+        If (bPublic) Begin
+            // Add client_id parameter
+            Move (sData + SFormat('&client_id=%1', sClientId)) to sData    
+        End
+        Else Begin
+            //Construct Authorization Header
+            Get g_Base64EncodeStr (sClientId + ':' + sClientSecret) to sAuthorizationHeader
+            Move ('Basic ' + sAuthorizationHeader) to sAuthorizationHeader
+            Get AddHeader 'Authorization' sAuthorizationHeader to iReturnValue
+        End
+        
+        Get AddHeader 'Content-Type' 'application/x-www-form-urlencoded' to iReturnValue
+        
+        Get HttpPostRequest sFilePath sData False to iReturnValue
+        Function_Return (iReturnValue <> 0)
+    End_Function
+    
+    Function GetUserInformation String sAccessToken Returns Boolean
+        Integer iReturnValue
+        String sAuthorizationHeader sFilePath
+        
+        Get psUserInfoEndpoint to sFilePath
+        Send RequestSetup (&sFilePath)
+        
+        Move ('Bearer ' + sAccessToken) to sAuthorizationHeader
+        
+        Send ClearHeaders
+        Get AddHeader 'Authorization' sAuthorizationHeader to iReturnValue
+        Get HTTPGetRequest sFilePath to iReturnValue
+        Function_Return (iReturnvalue <> 0)
+    End_Function
+    
+    Function GetCertficates Returns Boolean
+        Integer iReturnValue
+        String sFilePath
+        
+        Get psJWKSEndpoint of Self  to sFilePath
+        Send RequestSetup (&sFilePath)
+        
+        Send ClearHeaders
+        Get HTTPGetRequest sFilePath to iReturnValue
+        Function_Return (iReturnvalue <> 0)
+    End_Function
+    
+    Function GetDiscovery Returns Boolean
+        Integer iReturnValue
+        String sFilePath
+        Boolean bRelative
+        
+        Get psDiscoveryEndpoint to sFilePath
+        If (SizeOfString(sFilePath) = 0) Begin
+            Move ".well-known/openid-configuration" to sFilePath
+        End
+        Send RequestSetup (&sFilePath)
+        
+        Send ClearHeaders
+        Get HTTPGetRequest sFilePath to iReturnValue
+        Function_Return (iReturnValue <> 0)
+    End_Function
+
+    Procedure OnDataReceived String sContentType String sData
+        Forward Send OnDataReceived sContentType sData
+        
+        Set psResultData to (psResultData(Self) + sData)
+    End_Procedure
+    
+    Procedure SetupHost String sSsoHost
+        String sParsedHost sParsedPort sParsedScheme
+        Integer iHttpPos iHttpsPos iSlashPos
+        Handle hoURIParser
+        Boolean bHTTPS
+        
+        // Setup host values
+        If (SizeOfString(sSsoHost) = 0) Begin
+            Get psSSOHost to sSsoHost
+        End
+        
+        Get phoURIParser to hoURIParser
+        Send ParseURI of hoURIParser sSsoHost
+        Get psHost of hoURIParser to sParsedHost
+        Get psPort of hoURIParser to sParsedPort
+        Get psScheme of hoURIParser to sParsedScheme
+        
+        // ifSecure flag
+        If (sParsedScheme = "https") ;
+            Set peTransferFlags to ifSecure
+        Else ;
+            Set peTransferFlags to 0
+        
+        // Port based on scheme
+        If (sParsedScheme = "https") ;
+            Set piRemotePort to rpHttpSSL    
+        Else ;
+            Set piRemotePort to rpHttp 
+        
+        // possibly overwrite custom port
+        If (sParsedPort <> "") ;
+            Set piRemotePort to sParsedPort
+        
+        // Set the host
+        Set psRemoteHost to sParsedHost
+    End_Procedure
+End_Class

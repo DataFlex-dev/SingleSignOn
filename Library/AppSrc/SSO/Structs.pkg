@@ -1,0 +1,164 @@
+﻿//Struct tTokenResponse 
+//    { Name = "access_token" }
+//    String sAccesstoken
+//    { Name = "expires_in" }
+//    Integer iExpiresIn
+//    { Name = "refresh_token" }
+//    String sRefreshToken
+//    { Name = "token_type" }
+//    String sTokenType
+//    { Name = "id_token" }
+//    String sIdToken
+//    { Name = "scope" }
+//    String sScope
+//End_Struct
+
+Struct tSsoTokenResponse
+    Boolean     bSuccess
+    String      sProviderId
+    String      sSubject
+    String      sTokenType
+    String      sAccessToken
+    String      sRefreshToken
+    String      sIdToken
+    DateTime    dtExpiresAt
+    String      sScope
+    String      sRawResponse
+    String      sError
+    String      sStateViewHash
+End_Struct
+
+Struct tSsoIdentity
+    String      sProviderId
+    String      sSubject
+    String      sIdToken
+    String      sAccessToken
+    String      sRefreshToken
+    String      sScope
+    DateTime    dtExpiresAt
+End_Struct
+
+Struct tSsoIntrospectResult
+    Boolean     bSuccess
+    Boolean     bActive
+    String      sScope
+    String      sClientId
+    String      sUsername
+    String      sTokenType
+    UBigInt     ubiExpiration
+    UBigInt     ubiIssuedAt
+    UBigInt     ubiNotBefore
+    String      sSubject
+    String      sAudience
+    String      sIssuer
+    String      sJwtId
+    String      sRawResponse
+    String      sError
+End_Struct
+
+Struct tSsoOpenIDDiscovery
+    { Name="issuer" }
+    String sIssuer
+    { Name="authorization_endpoint" }
+    String sAuthorizationEndpoint
+    { Name="token_endpoint" }
+    String sTokenEndpoint
+    { Name="userinfo_endpoint" }
+    String sUserinfoEndpoint
+    { Name="jwks_uri" }
+    String sJwksUri
+    { Name="registration_endpoint" }
+    String sRegistrationEndpoint
+    { Name="revocation_endpoint" }
+    String sRevocationEndpoint
+    { Name="introspection_endpoint" }
+    String sIntrospectionEndpoint
+    { Name="device_authorization_endpoint" }
+    String sDeviceAuthorizationEndpoint
+    { Name="end_session_endpoint" }
+    String sEndSessionEndpoint
+    { Name="check_session_iframe" }
+    String sCheckSessionIframe
+    { Name="pushed_authorization_request_endpoint" }
+    String sPushedAuthorizationRequestEndpoint
+    { Name="scopes_supported" }
+    String[] asScopesSupported
+    { Name="response_types_supported" }
+    String[] asResponseTypesSupported
+    { Name="response_modes_supported" }
+    String[] asResponseModesSupported
+    { Name="grant_types_supported" }
+    String[] asGrantTypesSupported
+    { Name="acr_values_supported" }
+    String[] asAcrValuesSupported
+    { Name="subject_types_supported" }
+    String[] asSubjectTypesSupported
+    { Name="id_token_signing_alg_values_supported" }
+    String[] asIdTokenSigningAlgValuesSupported
+    { Name="id_token_encryption_alg_values_supported" }
+    String[] asIdTokenEncryptionAlgValuesSupported
+    { Name="id_token_encryption_enc_values_supported" }
+    String[] asIdTokenEncryptionEncValuesSupported
+    { Name="userinfo_signing_alg_values_supported" }
+    String[] asUserinfoSigningAlgValuesSupported
+    { Name="userinfo_encryption_alg_values_supported" }
+    String[] asUserinfoEncryptionAlgValuesSupported
+    { Name="userinfo_encryption_enc_values_supported" }
+    String[] asUserinfoEncryptionEncValuesSupported
+    { Name="request_object_signing_alg_values_supported" }
+    String[] asRequestObjectSigningAlgValuesSupported
+    { Name="request_object_encryption_alg_values_supported" }
+    String[] asRequestObjectEncryptionAlgValuesSupported
+    { Name="request_object_encryption_enc_values_supported" }
+    String[] asRequestObjectEncryptionEncValuesSupported
+    { Name="token_endpoint_auth_methods_supported" }
+    String[] asTokenEndpointAuthMethodsSupported
+    { Name="token_endpoint_auth_signing_alg_values_supported" }
+    String[] asTokenEndpointAuthSigningAlgValuesSupported
+    { Name="introspection_endpoint_auth_methods_supported" }
+    String[] asIntrospectionEndpointAuthMethodsSupported
+    { Name="introspection_endpoint_auth_signing_alg_values_supported" }
+    String[] asIntrospectionEndpointAuthSigningAlgValuesSupported
+    { Name="revocation_endpoint_auth_methods_supported" }
+    String[] asRevocationEndpointAuthMethodsSupported
+    { Name="revocation_endpoint_auth_signing_alg_values_supported" }
+    String[] asRevocationEndpointAuthSigningAlgValuesSupported
+    { Name="code_challenge_methods_supported" }
+    String[] asCodeChallengeMethodsSupported
+    { Name="claims_supported" }
+    String[] asClaimsSupported
+    { Name="claim_types_supported" }
+    String[] asClaimTypesSupported
+    { Name="claims_locales_supported" }
+    String[] asClaimsLocalesSupported
+    { Name="ui_locales_supported" }
+    String[] asUiLocalesSupported
+    { Name="display_values_supported" }
+    String[] asDisplayValuesSupported
+    { Name="claims_parameter_supported" }
+    Boolean bClaimsParameterSupported
+    { Name="request_parameter_supported" }
+    Boolean bRequestParameterSupported
+    { Name="request_uri_parameter_supported" }
+    Boolean bRequestUriParameterSupported
+    { Name="require_request_uri_registration" }
+    Boolean bRequireRequestUriRegistration
+    { Name="tls_client_certificate_bound_access_tokens" }
+    Boolean bTlsClientCertificateBoundAccessTokens
+    { Name="authorization_response_iss_parameter_supported" }
+    Boolean bAuthorizationResponseIssParameterSupported
+    { Name="service_documentation" }
+    String sServiceDocumentation
+    { Name="op_policy_uri" }
+    String sOpPolicyUri
+    { Name="op_tos_uri" }
+    String sOpTosUri
+    { Name="frontchannel_logout_supported" }
+    Boolean bFrontchannelLogoutSupported
+    { Name="frontchannel_logout_session_supported" }
+    Boolean bFrontchannelLogoutSessionSupported
+    { Name="backchannel_logout_supported" }
+    Boolean bBackchannelLogoutSupported
+    { Name="backchannel_logout_session_supported" }
+    Boolean bBackchannelLogoutSessionSupported
+End_Struct

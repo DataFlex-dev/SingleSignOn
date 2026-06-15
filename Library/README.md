@@ -1,5 +1,9 @@
 # Library Template
 
+## Table of Contents
+- [Structure](#structure)
+- [Getting Started](#getting-started)
+
 This directory should only include the library.
 
 ## Structure

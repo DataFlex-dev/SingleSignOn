@@ -1,0 +1,48 @@
+﻿#IFNDEF gVoid
+// This global variable is used throughout the DataFlex Payment Library when dealing with void
+// parameters or return values. It keeps the code cleaner compared to declaring local variables
+// all the time.
+Global_Variable Void_Type gVoid
+#ENDIF
+
+Define C_SSO_CODE_VERIFIER_METHOD_S256      for "S256"
+Define C_SSO_STATE_SEPARATOR                for "|@|"
+Define C_SSO_LOGIN_ERROR_PARAMETER          for "sso_error"
+Define C_SSO_LOGOUT_RETURN_PARAMETER        for "sso_logout_state"
+
+Define C_SSO_TOKEN_TYPE_ACCESS for "access_token"
+Define C_SSO_TOKEN_TYPE_REFRESH for "refresh_token"
+
+Struct tNvPair
+    String sName
+    String sValue
+End_Struct
+
+Struct tSsoCallbackData
+    String sProviderID
+    tNvPair[] aFields
+    Handle hoBodyData
+    Boolean bParseError
+End_Struct
+
+Struct tSsoUserInfo
+    String sSubject
+    tNvPair[] aFields
+End_Struct
+
+Global_Variable Handle ghoSso
+
+Use SSO\Structs.pkg
+Use SSO\Base64Encoder.pkg
+Use SSO\SsoOpenSslBindings.pkg
+Use SSO\URI.pkg
+Use SSO\cSsoOnLoad_mixin.pkg
+Use SSO\cApi.pkg
+
+Use SSO\cSsoProvider.pkg
+Use SSO\cSsoStateBase_mixin.pkg
+Use SSO\cSsoState_mixin.pkg
+
+
+
+//Use SSO\cSsoStateWebProperty_mixin.pkg TODO: refactor

@@ -1,0 +1,65 @@
+﻿Function g_Base64UrlEncodeStr Global String sData Returns String
+    UChar[] ucaData
+    
+    Get g_Base64EncodeUCharArray (StringToUCharArray(sData)) to ucaData
+    Move (UCharArrayToString(ucaData)) to sData
+    Move (Replaces('+', sData, '-')) to sData
+    Move (Replaces('/', sData, '_')) to sData
+    Move (Replaces('=', sData, '')) to sData
+    
+    Function_Return sData
+End_Function
+    
+Function g_Base64UrlDecodeStr Global String sData Returns String
+    UChar[] ucaData
+    
+    Move (Replaces('-', sData, '+')) to sData
+    Move (Replaces('_', sData, '/')) to sData
+    Get g_Base64DecodeUCharArray (StringToUCharArray(sData)) to ucaData
+    
+    Function_Return (UCharArrayToString(ucaData))
+End_Function
+    
+// base 64 Encode from Uchar array to a Uchar array
+Function g_Base64EncodeUCharArray Global UChar[] UCharData Returns UChar[]
+    Pointer pBase64
+    Integer iLen
+    Boolean bOk
+    
+    Move (SizeOfArray(UCharData)) to iLen
+    If (iLen > 0) Begin
+        Move (Base64Encode(AddressOf(UCharData), iLen)) to pBase64
+        Move (CStringLength(pBase64)) to iLen
+        Move (ResizeArray(UCharData,iLen)) to UCharData
+        Move (MemCopy(AddressOf(UCharData),pBase64,iLen)) to bOk
+        Move (Free(pBase64)) to bOk
+    End
+    
+    Function_Return UCharData
+End_Function
+
+// base 64 Decode from Uchar array to a Uchar array
+Function g_Base64DecodeUCharArray Global UChar[] UCharData Returns UChar[]
+    Pointer pData
+    Integer iLen
+    Boolean bOk
+    
+    Move (SizeOfArray(UCharData)) to iLen
+    If (iLen > 0) Begin
+        Move 0 to UCharData[iLen]
+        Move (Base64Decode(AddressOf(UCharData),&iLen)) to pData
+        Move (ResizeArray(UCharData,iLen)) to UCharData
+        Move (MemCopy(AddressOf(UCharData),pData,iLen)) to bOk
+        Move (Free(pData)) to bOk
+    End
+    
+    Function_Return UCharData
+End_Function
+    
+Function g_Base64EncodeStr String sData Returns String
+    Function_Return (UCharArrayToString(g_Base64EncodeUCharArray(StringToUCharArray(sData))))
+End_Function
+
+Function g_Base64DecodeStr String sData Returns String
+    Function_Return (UCharArrayToString(g_Base64DecodeUCharArray(StringToUCharArray(sData))))
+End_Function
