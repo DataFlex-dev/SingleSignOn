@@ -251,7 +251,7 @@ Class cSsoProviderOpenId is a cSsoProvider
         End
         
         // if it doesn't start with a protocol it's relative
-        Move (not(Pos("https://", sEndpoint) = 1 and Pos("http://", sEndpoint) = 1)) to bRelative
+        Move (not(Pos("https://", sEndpoint) = 1 or Pos("http://", sEndpoint) = 1)) to bRelative
         If (bRelative) Begin
             Move (psSSOHost(Self) + sEndpoint) to sEndpoint
         End
@@ -292,7 +292,7 @@ Class cSsoProviderOpenId is a cSsoProvider
         End
         
         // if it doesn't start with a protocol it's relative
-        Move (not(Pos("https://", sEndpoint) = 1 and Pos("http://", sEndpoint) = 1)) to bRelative
+        Move (not(Pos("https://", sEndpoint) = 1 or Pos("http://", sEndpoint) = 1)) to bRelative
         If (bRelative) Begin
             Move (psSSOHost(Self) + sEndpoint) to sEndpoint
         End
