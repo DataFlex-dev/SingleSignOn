@@ -68,7 +68,13 @@ Object oSSOCallbackHandler is a cWebHttpHandler
         Get psHomeURL of ghoSso to sHomeURL
         
         // Add all params (might add more in the future)
-        Move (SFormat("%1/?%2", sHomeUrl, StrJoinFromArray(aParams, "&"))) to sHomeUrl
+        If (SizeOfArray(aParams) > 0) Begin
+            Move (SFormat("%1/?%2", sHomeUrl, StrJoinFromArray(aParams, "&"))) to sHomeUrl
+        End
+        Else Begin
+            // No params
+            Move (sHomeUrl + "/") to sHomeUrl
+        End
         
         // Add the stateview hash back to the end of the url
         If (SizeOfString(sStateViewHash) > 0) Begin
