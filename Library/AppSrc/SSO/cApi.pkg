@@ -204,19 +204,25 @@ Class cSsoApi is a cObject
         // Add stateview hash to response struct
         Move sStateViewHash to tResponse.sStateViewHash
         
-        If (tResponse.bSuccess) Begin
-            // Event
-            Get SsoLoginSuccess of hoStateObject tResponse to tResponse
+        // hoStateObject can be 0 here, sending to handle 0 would raise a runtime error.
+        If (hoStateObject <> 0) Begin
+            If (tResponse.bSuccess) Begin
+                // Event
+                Get SsoLoginSuccess of hoStateObject tResponse to tResponse
+            End
+            Else Begin
+                If (hoProvider = 0) Begin
+                    Move "Couldn't parse provider from state" to tResponse.sError
+                End
+
+                // Event
+                Get SsoLoginFailed of hoStateObject tResponse to tResponse
+            End
         End
         Else Begin
-            If (hoProvider = 0) Begin
-                Move "Couldn't parse provider from state" to tResponse.sError
-            End
-            
-            // Event
-            Get SsoLoginFailed of hoStateObject tResponse to tResponse
+            Move "Couldn't resolve state" to tResponse.sError
         End
-        
+
         Function_Return tResponse
     End_Function
     
