@@ -2,7 +2,6 @@
 Use WinUuid.pkg
 Use cCryptographerEx.pkg
 
-// ToDo: After getting the tokens from the token endpoint we should validate the nonce if it was passed in the original authorization request
 Class cSsoApi is a cObject
     
     Procedure Construct_Object
@@ -105,7 +104,7 @@ Class cSsoApi is a cObject
     End_Function
     
     Procedure IdentityLogin Handle hoStateObject String sProviderID String sStateViewHash String sPrompt
-        String sAccessToken sRefreshToken sSessionKey sClientID sCallBackUrl sState
+        String sAccessToken sRefreshToken sSessionKey sClientID sCallBackUrl sState sNonce sRawNonce
 	    Boolean bRetrieveToken bValid bSuccess
 	    tSsoUserInfo UserInfo
 	    Handle hoProvider
@@ -172,8 +171,14 @@ Class cSsoApi is a cObject
                 
                 // Add state view hash to return to (if an empty string is passed it will not be used)
                 Move (sState + C_SSO_STATE_SEPARATOR + sStateViewHash) to sState
-                
-	            Send SendSsoLoginRequest of hoProvider sClientID sCallBackUrl sState sPrompt
+
+                // Nonce is hashed before it ever leaves this process. Only the hash travels in state and in the request to the provider, the raw value is discarded right after
+                Get RandomHexUUID to sRawNonce
+                Get CreateSha256Hash sRawNonce to sNonce
+                Get g_Base64UrlEncodeStr sNonce to sNonce
+                Move (sState + C_SSO_STATE_SEPARATOR + sNonce) to sState
+
+	            Send SendSsoLoginRequest of hoProvider sClientID sCallBackUrl sState sPrompt sNonce
             End
 	    End
     End_Procedure
@@ -192,13 +197,13 @@ Class cSsoApi is a cObject
     
     Function HandleCallback String sCode String sState Returns tSsoTokenResponse
         Handle hoStateObject hoProvider
-        String sCodeVerifier sStateViewHash
+        String sCodeVerifier sStateViewHash sNonce
         tSsoTokenResponse tResponse
-        
-        Send ResolveState sState (&hoStateObject) (&hoProvider) (&sStateViewHash) (&sCodeVerifier)
-        
+
+        Send ResolveState sState (&hoStateObject) (&hoProvider) (&sStateViewHash) (&sNonce) (&sCodeVerifier)
+
         If (hoProvider <> 0) Begin
-            Get ExchangeAuthorizationCode of hoProvider sCode (psCallbackURLLogin(Self)) sCodeVerifier to tResponse
+            Get ExchangeAuthorizationCode of hoProvider sCode (psCallbackURLLogin(Self)) sCodeVerifier sNonce to tResponse
         End
         
         // Add stateview hash to response struct
@@ -398,12 +403,12 @@ Class cSsoApi is a cObject
     End_Function
     
     // Helper function to help resolve the state parameter
-    // state structure: 'psStateKey(hoStateObject)|@|ProviderId(hoProvider)|@|StateViewHash(optional, empty if not passed)|@|CodeChallengeMethod|@|EncryptedCodeVerifier(code challenge only used for public clients)'
+    // state structure: 'psStateKey(hoStateObject)|@|ProviderId(hoProvider)|@|StateViewHash(optional, empty if not passed)|@|Nonce|@|EncryptedCodeVerifier(code challenge only used for public clients)'
     { Visibility=Private }
-    Procedure ResolveState String sState Handle ByRef hoStateObject Handle ByRef hoProvider String ByRef sStateViewHash String ByRef sCodeVerifier
+    Procedure ResolveState String sState Handle ByRef hoStateObject Handle ByRef hoProvider String ByRef sStateViewHash String ByRef sNonce String ByRef sCodeVerifier
         String[] asParts
         Integer iArrSize
-        
+
         Get g_Base64UrlDecodeStr sState to sState
         Move (StrSplitToArray(sState, C_SSO_STATE_SEPARATOR)) to asParts
         Move (SizeOfArray(asParts)) to iArrSize
@@ -411,19 +416,24 @@ Class cSsoApi is a cObject
             // first index will be the psStateKey of the state object
             Get StateObjectByState asParts[0] to hoStateObject
         End
-        
+
         If (iArrSize > 1) Begin
             // second index will be the providerId
             Get ProviderById asParts[1] to hoProvider
         End
-        
+
         If (iArrSize > 2) Begin
             Move asParts[2] to sStateViewHash
         End
-        
+
         If (iArrSize > 3) Begin
-            // third index will be the encrypted code verifier (mandatory for public clients)
-            Get DecryptCodeVerifier asParts[3] to sCodeVerifier
+            // fourth index will be the nonce that was sent in the original authorization request
+            Move asParts[3] to sNonce
+        End
+
+        If (iArrSize > 4) Begin
+            // fifth index will be the encrypted code verifier (mandatory for public clients)
+            Get DecryptCodeVerifier asParts[4] to sCodeVerifier
         End
     End_Procedure
     // Generate an encrypted code verifier for in the state parameter the code_challenge gets passed back as ByRef parameter

@@ -14,7 +14,7 @@ Class cSsoProvider is a cObject
     
     // Used to send the login request to the provider. Usually redirects the user to the SSO Service login page
     { Visibility=Private }
-    Procedure SendSsoLoginRequest String sClientID String sCallBackUrl String sState String sPrompt
+    Procedure SendSsoLoginRequest String sClientID String sCallBackUrl String sState String sPrompt String sNonce
         Error DFERR_PROGRAM "This method (cSsoProvider.SendSsoLoginRequest) must be overridden. An empty implementation is allowed."
     End_Procedure
     
@@ -50,7 +50,7 @@ Class cSsoProvider is a cObject
     End_Function
     
     { Visibility=Private }
-    Function ExchangeAuthorizationCode String sCode String sRedirectUri String sCodeVerifier Returns tSsoTokenResponse
+    Function ExchangeAuthorizationCode String sCode String sRedirectUri String sCodeVerifier String sExpectedNonce Returns tSsoTokenResponse
         Error DFERR_PROGRAM "This method (cSsoProvider.ExchangeAuthorizationCode) must be overridden. An empty implementation is allowed."
     End_Function
     

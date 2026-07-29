@@ -236,7 +236,7 @@ Class cSsoProviderOpenId is a cSsoProvider
     End_Function
     
     { Visibility=Private }
-    Procedure SendSsoLoginRequest String sClientID String sCallBackUrl String sState String sPrompt
+    Procedure SendSsoLoginRequest String sClientID String sCallBackUrl String sState String sPrompt String sNonce
         String sEndpoint sScope sCodeChallenge sCodeChallengeMethod sEncryptedCodeVerifier sCodeChallengeParam sHost sPath
         Boolean bPublic bRelative bForceCodeChallenge
         Handle hoRequestSender
@@ -271,8 +271,8 @@ Class cSsoProviderOpenId is a cSsoProvider
         End
         
         Get g_Base64UrlEncodeStr sState to sState
-        Move (SFormat(sEndpoint + '?client_id=%1&redirect_uri=%2&state=%3&response_type=code&scope=%4&nonce=xyz%5%6' ,;
-            sClientID, sCallBackUrl, sState, sScope, sPrompt, sCodeChallengeParam)) to sEndpoint
+        Move (SFormat(sEndpoint + '?client_id=%1&redirect_uri=%2&state=%3&response_type=code&scope=%4&nonce=%5%6%7' ,;
+            sClientID, sCallBackUrl, sState, sScope, sNonce, sPrompt, sCodeChallengeParam)) to sEndpoint
             
         Send NavigateToPage of ghoWebApp sEndpoint btCurrentWindow
     End_Procedure
@@ -323,19 +323,19 @@ Class cSsoProviderOpenId is a cSsoProvider
     End_Function
     
     { Visibility=Private }
-    Function ExchangeAuthorizationCode String sCode String sRedirectUri String sCodeVerifier Returns tSsoTokenResponse
+    Function ExchangeAuthorizationCode String sCode String sRedirectUri String sCodeVerifier String sExpectedNonce Returns tSsoTokenResponse
         String sResult
         tSsoTokenResponse tResponse
         Handle hoJson
-        
+
         If (SizeOfString(sCodeVerifier) > 0) Begin
             Get SSORequestToken of (phoRequestSender(Self)) sCode sRedirectUri sCodeVerifier to tResponse.bSuccess
         End
         Else Begin
             Get SSORequestToken of (phoRequestSender(Self)) sCode sRedirectUri to tResponse.bSuccess
         End
-        
-        Get ParseTokenResponse (psScopeParam(Self)) to tResponse
+
+        Get ParseTokenResponse (psScopeParam(Self)) sExpectedNonce to tResponse
         Function_Return tResponse
     End_Function
     
@@ -353,7 +353,8 @@ Class cSsoProviderOpenId is a cSsoProvider
         tSsoTokenResponse stTokenResponse
         
         Get SSORefreshToken of (phoRequestSender(Self)) sRefreshToken sScope to bValid
-        Get ParseTokenResponse sScope to stTokenResponse
+        // No nonce to check on a refresh, there's no fresh authorization request behind it
+        Get ParseTokenResponse sScope "" to stTokenResponse
         
         Function_Return stTokenResponse
     End_Function
@@ -513,8 +514,8 @@ Class cSsoProviderOpenId is a cSsoProvider
     End_Function
     
     { Visibility=Private }
-    Function ParseTokenResponse String sRequestedScopes Returns tSsoTokenResponse
-        String sResult
+    Function ParseTokenResponse String sRequestedScopes String sExpectedNonce Returns tSsoTokenResponse
+        String sResult sTokenNonce
         Handle hoJson hoJwt
         tSsoTokenResponse stTokenResponse
         Integer iExpiresIn iRetVal
@@ -561,12 +562,23 @@ Class cSsoProviderOpenId is a cSsoProvider
             
             // If we got an IDToken we can extract the subject
             Get phoJWT to hoJwt
-            
+
             If (hoJwt) Begin
                 Get DecodeString of hoJwt stTokenResponse.sIdToken to iRetVal
                 If (iRetVal = C_JWT_VALID) Begin
                     Move False to bGetSubject
-                    Get Subject of hoJwt to stTokenResponse.sSubject 
+                    Get Subject of hoJwt to stTokenResponse.sSubject
+
+                    // Confirm this id_token was issued for this login attempt, not replayed from an earlier one
+                    If (SizeOfString(sExpectedNonce) > 0) Begin
+                        Move "" to sTokenNonce
+                        If (HasMember(hoJwt, "nonce")) Move (MemberValue(hoJwt, "nonce")) to sTokenNonce
+
+                        If (sTokenNonce <> sExpectedNonce) Begin
+                            Move False to stTokenResponse.bSuccess
+                            Move "Nonce mismatch" to stTokenResponse.sError
+                        End
+                    End
                 End
             End
         End

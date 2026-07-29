@@ -26,7 +26,7 @@ Object oSSOCallbackHandler is a cWebHttpHandler
     
     Procedure HandleLogin
         Boolean bOk bErrorRequest
-        String sCode sState sHomeUrl sError sErrDesc sStateViewHash sCodeVerifier
+        String sCode sState sHomeUrl sError sErrDesc sStateViewHash sNonce sCodeVerifier
         Handle hoStateObject hoApi hoProvider
         tSsoTokenResponse TokenResponse
         String[] aParams
@@ -53,7 +53,7 @@ Object oSSOCallbackHandler is a cWebHttpHandler
         
         // ToDo: Swap ghoSso with hoApi?
         If (bErrorRequest) Begin
-            Send ResolveState of ghoSso sState (&hoStateObject) (&hoProvider) (&sStateViewHash) (&sCodeVerifier)
+            Send ResolveState of ghoSso sState (&hoStateObject) (&hoProvider) (&sStateViewHash) (&sNonce) (&sCodeVerifier)
             Move (C_SSO_LOGIN_ERROR_PARAMETER + "=" + sErrDesc) to aParams[SizeOfArray(aParams)]
         End
         Else Begin
