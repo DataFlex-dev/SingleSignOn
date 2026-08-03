@@ -562,13 +562,25 @@ Class cSsoProviderOpenId is a cSsoProvider
             // If we got an IDToken we can extract the subject
             Get phoJWT to hoJwt
             
-            If (hoJwt) Begin
-                Get DecodeString of hoJwt stTokenResponse.sIdToken to iRetVal
-                If (iRetVal = C_JWT_VALID) Begin
-                    Move False to bGetSubject
-                    Get Subject of hoJwt to stTokenResponse.sSubject 
-                End
+            If (not(hoJwt)) Begin
+                // Provider returned an id_token but no JWT object is available to verify it against
+                Move False to stTokenResponse.bSuccess
+                Move "id_token present but could not be verified" to stTokenResponse.sError
+                Send Destroy of hoJson
+                Function_Return stTokenResponse
             End
+
+            Get DecodeString of hoJwt stTokenResponse.sIdToken to iRetVal
+            If (iRetVal <> C_JWT_VALID) Begin
+                // Provider returned an id_token but it could not be verified, do not fall back to userinfo
+                Move False to stTokenResponse.bSuccess
+                Move "id_token could not be verified" to stTokenResponse.sError
+                Send Destroy of hoJson
+                Function_Return stTokenResponse
+            End
+
+            Move False to bGetSubject
+            Get Subject of hoJwt to stTokenResponse.sSubject
         End
         If (HasMember(hoJson, "scope")) Begin
             Get MemberValue of hoJson "scope" to stTokenResponse.sScope
