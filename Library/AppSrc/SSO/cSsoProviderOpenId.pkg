@@ -566,8 +566,20 @@ Class cSsoProviderOpenId is a cSsoProvider
                 Get DecodeString of hoJwt stTokenResponse.sIdToken to iRetVal
                 If (iRetVal = C_JWT_VALID) Begin
                     Move False to bGetSubject
-                    Get Subject of hoJwt to stTokenResponse.sSubject 
+                    Get Subject of hoJwt to stTokenResponse.sSubject
                 End
+                Else Begin
+                    // Provider returned an id_token but it could not be verified, do not fall back to userinfo
+                    Move False to bGetSubject
+                    Move False to stTokenResponse.bSuccess
+                    Move "id_token could not be verified" to stTokenResponse.sError
+                End
+            End
+            Else Begin
+                // Provider returned an id_token but no JWT object is available to verify it against
+                Move False to bGetSubject
+                Move False to stTokenResponse.bSuccess
+                Move "id_token present but could not be verified" to stTokenResponse.sError
             End
         End
         If (HasMember(hoJson, "scope")) Begin
