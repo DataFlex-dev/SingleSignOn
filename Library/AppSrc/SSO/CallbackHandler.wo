@@ -26,7 +26,7 @@ Object oSSOCallbackHandler is a cWebHttpHandler
     
     Procedure HandleLogin
         Boolean bOk bErrorRequest
-        String sCode sState sHomeUrl sError sErrDesc sStateViewHash sCodeVerifier
+        String sCode sState sHomeUrl sError sErrDesc sEncodedError sStateViewHash sCodeVerifier
         Handle hoStateObject hoApi hoProvider
         tSsoTokenResponse TokenResponse
         String[] aParams
@@ -44,6 +44,12 @@ Object oSSOCallbackHandler is a cWebHttpHandler
                 Get UrlParameter 'error_description' to sErrDesc
                 // Replace + signs with spaces (If a value really should contain '+' it should be URL encoded as '%2B')
                 Move (Replaces("+", sErrDesc, " ")) to sErrDesc
+                If (SizeOfString(sErrDesc) > 0) Begin
+                    Move (sError + ": " + sErrDesc) to sErrDesc
+                End
+                Else Begin
+                    Move sError to sErrDesc
+                End
             End
             Else Begin
                 Error DFERR_PROGRAM "SSO provider did not return an authorization code or error."
@@ -54,12 +60,14 @@ Object oSSOCallbackHandler is a cWebHttpHandler
         // ToDo: Swap ghoSso with hoApi?
         If (bErrorRequest) Begin
             Send ResolveState of ghoSso sState (&hoStateObject) (&hoProvider) (&sStateViewHash) (&sCodeVerifier)
-            Move (C_SSO_LOGIN_ERROR_PARAMETER + "=" + sErrDesc) to aParams[SizeOfArray(aParams)]
+            Get UrlEncode sErrDesc True to sEncodedError
+            Move (C_SSO_LOGIN_ERROR_PARAMETER + "=" + sEncodedError) to aParams[SizeOfArray(aParams)]
         End
         Else Begin
             Get HandleCallback of ghoSso sCode sState to TokenResponse
             If (not(TokenResponse.bSuccess)) Begin
-                Move (C_SSO_LOGIN_ERROR_PARAMETER + "=" + TokenResponse.sError) to aParams[SizeOfArray(aParams)]   
+                Get UrlEncode TokenResponse.sError True to sEncodedError
+                Move (C_SSO_LOGIN_ERROR_PARAMETER + "=" + sEncodedError) to aParams[SizeOfArray(aParams)]
             End
             Move TokenResponse.sStateViewHash to sStateViewHash
         End

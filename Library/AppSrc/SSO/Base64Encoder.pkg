@@ -12,9 +12,25 @@ End_Function
     
 Function g_Base64UrlDecodeStr Global String sData Returns String
     UChar[] ucaData
+    Integer iRemainder
     
     Move (Replaces('-', sData, '+')) to sData
     Move (Replaces('_', sData, '/')) to sData
+
+    // URL-safe Base64 omits the '=' padding characters. Restore them before
+    // calling the Windows Base64 decoder; the PKCE verifier in the SSO state
+    // commonly has a length that requires two padding characters.
+    Move (Mod(SizeOfString(sData), 4)) to iRemainder
+    If (iRemainder = 1) Begin
+        Function_Return ""
+    End
+    Else If (iRemainder = 2) Begin
+        Move (sData + "==") to sData
+    End
+    Else If (iRemainder = 3) Begin
+        Move (sData + "=") to sData
+    End
+
     Get g_Base64DecodeUCharArray (StringToUCharArray(sData)) to ucaData
     
     Function_Return (UCharArrayToString(ucaData))
