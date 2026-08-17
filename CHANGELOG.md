@@ -1,6 +1,8 @@
 # Changelog
 
 ## Table of Contents
+- [Table of Contents](#table-of-contents)
+- [2.0.5](#205)
 - [2.0.4](#204)
 - [2.0.3](#203)
 - [2.0.2](#202)
@@ -13,7 +15,13 @@
 - [1.0.1](#101)
 
 With every version, there are some improvements, the improvements are listed below per verion number.
-Current Version: 2.0.4
+Current Version: 2.0.5
+
+## 2.0.5
+
+- Improved PKCE code-verifier validation and URL-safe Base64 decoding.
+- Correctly form-encode token-request parameter values.
+- Improved OpenID callback, token and endpoint handling.
 
 ## 2.0.4
 - Reject login when the id_token can't be verified, instead of silently falling back to userinfo.
