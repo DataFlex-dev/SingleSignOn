@@ -146,7 +146,7 @@ Class cSsoProviderOpenId is a cSsoProvider
         
         Set pbRequireAllMembers of hoJson to False
         Get JsonToDataType of hoJson to Discovery
-        
+
         Send SetEndpoint Discovery.sAuthorizationEndpoint   (RefProc(SetLoginEndpoint))
         Send SetEndpoint Discovery.sTokenEndpoint           (RefProc(SetTokenEndpoint))
         Send SetEndpoint Discovery.sUserinfoEndpoint        (RefProc(SetUserInfoEndpoint))
@@ -236,6 +236,14 @@ Class cSsoProviderOpenId is a cSsoProvider
     End_Function
     
     { Visibility=Private }
+    Function IsRelativeEndpoint String sEndpoint Returns Boolean
+        Boolean bRelative
+
+        Move ((Pos("https://", sEndpoint) <> 1) and (Pos("http://", sEndpoint) <> 1)) to bRelative
+        Function_Return bRelative
+    End_Function
+
+    { Visibility=Private }
     Procedure SendSsoLoginRequest String sClientID String sCallBackUrl String sState String sPrompt
         String sEndpoint sScope sCodeChallenge sCodeChallengeMethod sEncryptedCodeVerifier sCodeChallengeParam sHost sPath
         Boolean bPublic bRelative bForceCodeChallenge
@@ -250,8 +258,7 @@ Class cSsoProviderOpenId is a cSsoProvider
             Procedure_Return
         End
         
-        // if it doesn't start with a protocol it's relative
-        Move (not(Pos("https://", sEndpoint) = 1 or Pos("http://", sEndpoint) = 1)) to bRelative
+        Get IsRelativeEndpoint sEndpoint to bRelative
         If (bRelative) Begin
             Move (psSSOHost(Self) + sEndpoint) to sEndpoint
         End
@@ -291,8 +298,7 @@ Class cSsoProviderOpenId is a cSsoProvider
             Procedure_Return
         End
         
-        // if it doesn't start with a protocol it's relative
-        Move (not(Pos("https://", sEndpoint) = 1 or Pos("http://", sEndpoint) = 1)) to bRelative
+        Get IsRelativeEndpoint sEndpoint to bRelative
         If (bRelative) Begin
             Move (psSSOHost(Self) + sEndpoint) to sEndpoint
         End
@@ -382,9 +388,9 @@ Class cSsoProviderOpenId is a cSsoProvider
     { Visibility=Private }
     Function IntrospectToken String sToken String sOptTokenTypeHint Returns tSsoIntrospectResult
         Boolean bRequestSuccessful bOk
-        String sData
-        Integer iHttpStatus
-        Handle hoJsonObj
+        String sData sAudience
+        Integer iHttpStatus iJsonType
+        Handle hoJsonObj hoAudience
         tSsoIntrospectResult stResult
         
         If (num_arguments > 1) ;
@@ -406,7 +412,7 @@ Class cSsoProviderOpenId is a cSsoProvider
         End
 
         Get Create (RefClass(cJsonObject)) to hoJsonObj
-        Get ParseUtf8 of hoJsonObj sData to bOk
+        Get ParseString of hoJsonObj sData to bOk
         If (not(bOk)) Begin
             Move False to stResult.bSuccess
             Move "Invalid json structure received" to stResult.sError
@@ -441,7 +447,18 @@ Class cSsoProviderOpenId is a cSsoProvider
             Get MemberValue of hoJsonObj "sub" to stResult.sSubject
         End
         If (HasMember(hoJsonObj, "aud")) Begin
-            Get MemberValue of hoJsonObj "aud" to stResult.sAudience
+            Get MemberJsonType of hoJsonObj "aud" to iJsonType
+            If (iJsonType = jsonTypeArray) Begin
+                Get Member of hoJsonObj "aud" to hoAudience
+                If (hoAudience <> 0) Begin
+                    Get JsonToDataType of hoAudience to stResult.sAudience
+                    Send Destroy of hoAudience
+                End
+            End
+            Else If (iJsonType = jsonTypeString) Begin
+                Get MemberValue of hoJsonObj "aud" to sAudience
+                Move sAudience to stResult.sAudience[0]
+            End
         End
         If (HasMember(hoJsonObj, "iss")) Begin
             Get MemberValue of hoJsonObj "iss" to stResult.sIssuer
@@ -514,7 +531,7 @@ Class cSsoProviderOpenId is a cSsoProvider
     
     { Visibility=Private }
     Function ParseTokenResponse String sRequestedScopes Returns tSsoTokenResponse
-        String sResult
+        String sResult sErrorDescription
         Handle hoJson hoJwt
         tSsoTokenResponse stTokenResponse
         Integer iExpiresIn iRetVal
@@ -539,6 +556,12 @@ Class cSsoProviderOpenId is a cSsoProvider
         If (HasMember(hoJson, "error")) Begin
             Move False to stTokenResponse.bSuccess
             Get MemberValue of hoJson "error" to stTokenResponse.sError
+            If (HasMember(hoJson, "error_description")) Begin
+                Get MemberValue of hoJson "error_description" to sErrorDescription
+                If (SizeOfString(sErrorDescription) > 0) Begin
+                    Move (stTokenResponse.sError + ": " + sErrorDescription) to stTokenResponse.sError
+                End
+            End
             Send Destroy of hoJson
             Function_Return stTokenResponse
         End

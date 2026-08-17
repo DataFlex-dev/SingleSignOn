@@ -398,10 +398,11 @@ Class cSsoApi is a cObject
     End_Function
     
     // Helper function to help resolve the state parameter
-    // state structure: 'psStateKey(hoStateObject)|@|ProviderId(hoProvider)|@|StateViewHash(optional, empty if not passed)|@|CodeChallengeMethod|@|EncryptedCodeVerifier(code challenge only used for public clients)'
+    // state structure: 'psStateKey(hoStateObject)|@|ProviderId(hoProvider)|@|StateViewHash(optional, empty if not passed)|@|Base64UrlEncryptedCodeVerifier'
     { Visibility=Private }
     Procedure ResolveState String sState Handle ByRef hoStateObject Handle ByRef hoProvider String ByRef sStateViewHash String ByRef sCodeVerifier
         String[] asParts
+        String sEncryptedCodeVerifier
         Integer iArrSize
         
         Get g_Base64UrlDecodeStr sState to sState
@@ -422,8 +423,9 @@ Class cSsoApi is a cObject
         End
         
         If (iArrSize > 3) Begin
-            // third index will be the encrypted code verifier (mandatory for public clients)
-            Get DecryptCodeVerifier asParts[3] to sCodeVerifier
+            // fourth state part contains the Base64URL-encoded encrypted code verifier
+            Get g_Base64UrlDecodeStr asParts[3] to sEncryptedCodeVerifier
+            Get DecryptCodeVerifier sEncryptedCodeVerifier to sCodeVerifier
         End
     End_Procedure
     // Generate an encrypted code verifier for in the state parameter the code_challenge gets passed back as ByRef parameter
@@ -454,19 +456,50 @@ Class cSsoApi is a cObject
         // Encrypt for return
         Get Encrypt of hoCrypto (StringToUCharArray("some_password")) (StringToUCharArray(sCodeVerifier)) to ucaEncrypted
         Move (UCharArrayToString(ucaEncrypted, SizeOfArray(ucaEncrypted))) to sEncrypted
+        Get g_Base64UrlEncodeStr sEncrypted to sEncrypted
+        Send Destroy of hoCrypto
         
         Function_Return sEncrypted
+    End_Function
+
+    Function IsValidCodeVerifier String sCodeVerifier Returns Boolean
+        Integer iChar iCharTo
+        String sChar
+
+        Move (SizeOfString(sCodeVerifier)) to iCharTo
+        If (iCharTo < 43 or iCharTo > 128) Begin
+            Function_Return False
+        End
+
+        For iChar from 1 to iCharTo
+            Move (Mid(sCodeVerifier, 1, iChar)) to sChar
+            If (Pos(sChar, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~") = 0) Begin
+                Function_Return False
+            End
+        Loop
+
+        Function_Return True
     End_Function
     
     Function DecryptCodeVerifier String sEncryptedCodeVerifier Returns String
         Handle hoCrypto
         UChar[] ucaDecrypted
         String sDecrypted
+        Boolean bValid
         
+        If (SizeOfString(sEncryptedCodeVerifier) = 0) Begin
+            Function_Return ""
+        End
+
         Get Create (RefClass(cCryptoGrapherEx)) to hoCrypto
         Get Decrypt of hoCrypto (StringToUCharArray("some_password")) (StringToUCharArray(sEncryptedCodeVerifier)) to ucaDecrypted
         Send Destroy of hoCrypto
         Move (UCharArrayToString(ucaDecrypted, SizeOfArray(ucaDecrypted))) to sDecrypted
+
+        Get IsValidCodeVerifier sDecrypted to bValid
+        If (not(bValid)) Begin
+            Move "" to sDecrypted
+        End
         
         Function_Return sDecrypted
     End_Function

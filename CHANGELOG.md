@@ -1,6 +1,7 @@
 # Changelog
 
 ## Table of Contents
+- [2.0.1](#201)
 - [2.0.0](#200)
 - [1.0.5](#105)
 - [1.0.4](#104)
@@ -9,7 +10,12 @@
 - [1.0.1](#101)
 
 With every version, there are some improvements, the improvements are listed below per verion number.
-Current Version: 2.0.0
+Current Version: 2.0.1
+
+## 2.0.1
+- Improved PKCE code-verifier validation and URL-safe Base64 decoding.
+- Correctly form-encode token-request parameter values.
+- Improved OpenID callback, token and endpoint handling.
 
 ## 2.0.0
 - Completely refactored the way the library works. Everything revolves around "state" objects now. A state object is an object that keeps track of an identity which is a set of access/refresh token(s) and a subject (providers unique identifier).

@@ -49,7 +49,7 @@ Struct tSsoIntrospectResult
     UBigInt     ubiIssuedAt
     UBigInt     ubiNotBefore
     String      sSubject
-    String      sAudience
+    String[]    sAudience
     String      sIssuer
     String      sJwtId
     String      sRawResponse
