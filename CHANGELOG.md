@@ -1,6 +1,10 @@
 # Changelog
 
 ## Table of Contents
+- [2.0.4](#204)
+- [2.0.3](#203)
+- [2.0.2](#202)
+- [2.0.1](#201)
 - [2.0.0](#200)
 - [1.0.5](#105)
 - [1.0.4](#104)
@@ -9,7 +13,19 @@
 - [1.0.1](#101)
 
 With every version, there are some improvements, the improvements are listed below per verion number.
-Current Version: 2.0.0
+Current Version: 2.0.4
+
+## 2.0.4
+- Reject login when the id_token can't be verified, instead of silently falling back to userinfo.
+
+## 2.0.3
+- Fixed a crash on callback when the state param doesn't resolve to a known state object.
+
+## 2.0.2
+- Callback URL no longer keeps a trailing '?' when there are no parameters to append.
+
+## 2.0.1
+- Fixed a broken relative-endpoint check that treated every endpoint as relative.
 
 ## 2.0.0
 - Completely refactored the way the library works. Everything revolves around "state" objects now. A state object is an object that keeps track of an identity which is a set of access/refresh token(s) and a subject (providers unique identifier).
