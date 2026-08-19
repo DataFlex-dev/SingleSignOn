@@ -152,7 +152,7 @@ Class cSSORequestSender is a cHttpTransfer
         
         Send RequestSetup (&sFilePath)
 
-        Move ("token=" + UriEncodeComponent(sToken)) to sData
+        Move ("token=" + FormUrlEncodeComponent(sToken)) to sData
         If (num_arguments > 1) Begin
             // Allow application-specific token type constants while still sending
             // RFC/OAuth token_type_hint values to the provider.
@@ -188,6 +188,7 @@ Class cSSORequestSender is a cHttpTransfer
     Function SSORefreshToken String sRefreshToken String sScope Returns Boolean
         Boolean bPublic
         String sClientId sClientSecret sAuthorizationHeader sFilePath sData
+        String sEncodedRefreshToken sEncodedScope
         Integer iReturnValue
         
         Get pbPublicClient to bPublic
@@ -198,10 +199,11 @@ Class cSSORequestSender is a cHttpTransfer
         Send RequestSetup (&sFilePath)
 
         //Construct body data
+        Get FormUrlEncodeComponent sRefreshToken to sEncodedRefreshToken
+        Get FormUrlEncodeComponent sScope to sEncodedScope
         Move (SFormat('grant_type=refresh_token&refresh_token=%1&scope=%2',;
-                sRefreshToken,;
-                sScope)) to sData      
-        Move (Replaces(' ', sData, '%20')) to sData
+                sEncodedRefreshToken,;
+                sEncodedScope)) to sData
                
         //Adding the Headers
         Send ClearHeaders        
@@ -261,6 +263,7 @@ Class cSSORequestSender is a cHttpTransfer
     Function RevokeRefreshToken String sRefreshToken Returns Boolean
         Boolean bPublic
         String sFilePath sClientId sClientSecret sData sAuthorizationHeader
+        String sEncodedRefreshToken
         Integer iReturnValue
         
         Get pbPublicClient to bPublic
@@ -271,8 +274,9 @@ Class cSSORequestSender is a cHttpTransfer
         Send RequestSetup (&sFilePath)
         
         //Construct body data
+        Get FormUrlEncodeComponent sRefreshToken to sEncodedRefreshToken
         Move (SFormat('token=%1&token_type_hint=refresh_token',;
-                sRefreshToken)) to sData
+                sEncodedRefreshToken)) to sData
         
         //Adding the headers
         Send ClearHeaders        
