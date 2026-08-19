@@ -142,17 +142,19 @@ Class cSSORequestSender is a cHttpTransfer
     
     Function SSOIntrospectToken String sToken String sOptTokenTypeHint Returns Boolean
         Boolean bPublic
-        String sClientId sClientSecret sAuthorizationHeader sFilePath sData 
+        String sClientId sClientSecret sAuthorizationHeader sFilePath sData
+        String sEncodedToken sEncodedTokenTypeHint
         Integer iReturnValue
-        
+
         Get pbPublicClient to bPublic
         Get psIdentityClientId to sClientId
         Get psIdentityClientSecret to sClientSecret
         Get psIntrospectEndpoint to sFilePath
-        
+
         Send RequestSetup (&sFilePath)
 
-        Move ("token=" + FormUrlEncodeComponent(sToken)) to sData
+        Get FormUrlEncodeComponent sToken to sEncodedToken
+        Move ("token=" + sEncodedToken) to sData
         If (num_arguments > 1) Begin
             // Allow application-specific token type constants while still sending
             // RFC/OAuth token_type_hint values to the provider.
@@ -161,7 +163,8 @@ Class cSSORequestSender is a cHttpTransfer
             Else If (sOptTokenTypeHint = "RefreshToken") ;
                 Move C_SSO_TOKEN_TYPE_REFRESH to sOptTokenTypeHint
 
-            Move (sData + "&token_type_hint=" + UriEncodeComponent(sOptTokenTypeHint)) to sData
+            Move (UriEncodeComponent(sOptTokenTypeHint)) to sEncodedTokenTypeHint
+            Move (sData + "&token_type_hint=" + sEncodedTokenTypeHint) to sData
         End
                      
         //Adding the Headers
