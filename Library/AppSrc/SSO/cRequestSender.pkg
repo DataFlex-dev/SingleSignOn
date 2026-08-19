@@ -231,18 +231,20 @@ Class cSSORequestSender is a cHttpTransfer
     Function RevokeAccessToken String sAccessToken Returns Boolean
         Boolean bPublic
         String sFilePath sClientId sClientSecret sData sAuthorizationHeader
+        String sEncodedAccessToken
         Integer iReturnValue
-        
-        Get pbPublicClient to bPublic 
+
+        Get pbPublicClient to bPublic
         Get psIdentityClientId to sClientId
         Get psIdentityClientSecret to sClientSecret
         Get psTokenRevocationEndpoint to sFilePath
-        
+
         Send RequestSetup (&sFilePath)
-        
+
         //Construct body data
+        Get FormUrlEncodeComponent sAccessToken to sEncodedAccessToken
         Move (SFormat('token=%1&token_type_hint=access_token',;
-                sAccessToken)) to sData
+                sEncodedAccessToken)) to sData
         
         //Adding the headers
         Send ClearHeaders        
