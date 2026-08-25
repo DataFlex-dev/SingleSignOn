@@ -30,6 +30,35 @@ Class cSSORequestSender is a cHttpTransfer
         Get Create (RefClass(cURIParser)) to hoURIParser
         Set phoURIParser to hoURIParser
     End_Procedure
+
+    // UrlEncode leaves URI-reserved characters (such as '+', '&' and '=')
+    // untouched. Token requests use application/x-www-form-urlencoded, where
+    // those characters must be percent-encoded inside a parameter value.
+    Function FormUrlEncodeComponent String sValue Returns String
+        Move (Replaces("%", sValue, "%25")) to sValue
+        Move (UrlEncode(sValue, False)) to sValue
+
+        Move (Replaces(":", sValue, "%3A")) to sValue
+        Move (Replaces("/", sValue, "%2F")) to sValue
+        Move (Replaces("?", sValue, "%3F")) to sValue
+        Move (Replaces("#", sValue, "%23")) to sValue
+        Move (Replaces("[", sValue, "%5B")) to sValue
+        Move (Replaces("]", sValue, "%5D")) to sValue
+        Move (Replaces("@", sValue, "%40")) to sValue
+        Move (Replaces("!", sValue, "%21")) to sValue
+        Move (Replaces("$", sValue, "%24")) to sValue
+        Move (Replaces("&", sValue, "%26")) to sValue
+        Move (Replaces("'", sValue, "%27")) to sValue
+        Move (Replaces("(", sValue, "%28")) to sValue
+        Move (Replaces(")", sValue, "%29")) to sValue
+        Move (Replaces("*", sValue, "%2A")) to sValue
+        Move (Replaces("+", sValue, "%2B")) to sValue
+        Move (Replaces(",", sValue, "%2C")) to sValue
+        Move (Replaces(";", sValue, "%3B")) to sValue
+        Move (Replaces("=", sValue, "%3D")) to sValue
+
+        Function_Return sValue
+    End_Function
     
     Procedure RequestSetup String ByRef sFilePath
         String sSsoHost sRemoteHost sParsedHost
@@ -69,6 +98,7 @@ Class cSSORequestSender is a cHttpTransfer
         Boolean bPublic
         Integer iReturnValue
         String sFilePath sData sClientId sClientSecret sAuthorizationHeader
+        String sEncodedCode sEncodedRedirectURI sEncodedCodeVerifier sEncodedClientId
         
         Get pbPublicClient to bPublic
         Get psIdentityClientId to sClientId
@@ -78,20 +108,24 @@ Class cSSORequestSender is a cHttpTransfer
         Send RequestSetup (&sFilePath)
         
         //Construct body data
+        Get FormUrlEncodeComponent sCode to sEncodedCode
+        Get FormUrlEncodeComponent sRedirectURI to sEncodedRedirectURI
         Move (SFormat('grant_type=authorization_code&code=%1&redirect_uri=%2',;
-                sCode,;
-                sRedirectURI)) to sData
+                sEncodedCode,;
+                sEncodedRedirectURI)) to sData
         
         // Add code verifier if passed to function
         If (num_arguments > 2) Begin
-            Move (sData + "&code_verifier=" + sOptCodeVerifier) to sData    
+            Get FormUrlEncodeComponent sOptCodeVerifier to sEncodedCodeVerifier
+            Move (sData + "&code_verifier=" + sEncodedCodeVerifier) to sData
         End
         
         //Adding the Headers    
         Send ClearHeaders    
         If (bPublic) Begin
             // Add client_id parameter
-            Move (sData + "&client_id=" + sClientId) to sData    
+            Get FormUrlEncodeComponent sClientId to sEncodedClientId
+            Move (sData + "&client_id=" + sEncodedClientId) to sData
         End
         Else Begin
             //Construct Authorization Header
@@ -108,19 +142,29 @@ Class cSSORequestSender is a cHttpTransfer
     
     Function SSOIntrospectToken String sToken String sOptTokenTypeHint Returns Boolean
         Boolean bPublic
-        String sClientId sClientSecret sAuthorizationHeader sFilePath sData 
+        String sClientId sClientSecret sAuthorizationHeader sFilePath sData
+        String sEncodedToken sEncodedTokenTypeHint
         Integer iReturnValue
-        
+
         Get pbPublicClient to bPublic
         Get psIdentityClientId to sClientId
         Get psIdentityClientSecret to sClientSecret
         Get psIntrospectEndpoint to sFilePath
-        
+
         Send RequestSetup (&sFilePath)
 
-        Move ("token=" + sToken) to sData
+        Get FormUrlEncodeComponent sToken to sEncodedToken
+        Move ("token=" + sEncodedToken) to sData
         If (num_arguments > 1) Begin
-            Move (sData + "&token_type_hint=" + sOptTokenTypeHint) to sData
+            // Allow application-specific token type constants while still sending
+            // RFC/OAuth token_type_hint values to the provider.
+            If (sOptTokenTypeHint = "AccessToken") ;
+                Move C_SSO_TOKEN_TYPE_ACCESS to sOptTokenTypeHint
+            Else If (sOptTokenTypeHint = "RefreshToken") ;
+                Move C_SSO_TOKEN_TYPE_REFRESH to sOptTokenTypeHint
+
+            Get UriEncodeComponent sOptTokenTypeHint to sEncodedTokenTypeHint
+            Move (sData + "&token_type_hint=" + sEncodedTokenTypeHint) to sData
         End
                      
         //Adding the Headers
@@ -147,6 +191,7 @@ Class cSSORequestSender is a cHttpTransfer
     Function SSORefreshToken String sRefreshToken String sScope Returns Boolean
         Boolean bPublic
         String sClientId sClientSecret sAuthorizationHeader sFilePath sData
+        String sEncodedRefreshToken sEncodedScope
         Integer iReturnValue
         
         Get pbPublicClient to bPublic
@@ -157,10 +202,11 @@ Class cSSORequestSender is a cHttpTransfer
         Send RequestSetup (&sFilePath)
 
         //Construct body data
+        Get FormUrlEncodeComponent sRefreshToken to sEncodedRefreshToken
+        Get FormUrlEncodeComponent sScope to sEncodedScope
         Move (SFormat('grant_type=refresh_token&refresh_token=%1&scope=%2',;
-                sRefreshToken,;
-                sScope)) to sData      
-        Move (Replaces(' ', sData, '%20')) to sData
+                sEncodedRefreshToken,;
+                sEncodedScope)) to sData
                
         //Adding the Headers
         Send ClearHeaders        
@@ -185,18 +231,20 @@ Class cSSORequestSender is a cHttpTransfer
     Function RevokeAccessToken String sAccessToken Returns Boolean
         Boolean bPublic
         String sFilePath sClientId sClientSecret sData sAuthorizationHeader
+        String sEncodedAccessToken
         Integer iReturnValue
-        
-        Get pbPublicClient to bPublic 
+
+        Get pbPublicClient to bPublic
         Get psIdentityClientId to sClientId
         Get psIdentityClientSecret to sClientSecret
         Get psTokenRevocationEndpoint to sFilePath
-        
+
         Send RequestSetup (&sFilePath)
-        
+
         //Construct body data
+        Get FormUrlEncodeComponent sAccessToken to sEncodedAccessToken
         Move (SFormat('token=%1&token_type_hint=access_token',;
-                sAccessToken)) to sData
+                sEncodedAccessToken)) to sData
         
         //Adding the headers
         Send ClearHeaders        
@@ -220,6 +268,7 @@ Class cSSORequestSender is a cHttpTransfer
     Function RevokeRefreshToken String sRefreshToken Returns Boolean
         Boolean bPublic
         String sFilePath sClientId sClientSecret sData sAuthorizationHeader
+        String sEncodedRefreshToken
         Integer iReturnValue
         
         Get pbPublicClient to bPublic
@@ -230,8 +279,9 @@ Class cSSORequestSender is a cHttpTransfer
         Send RequestSetup (&sFilePath)
         
         //Construct body data
+        Get FormUrlEncodeComponent sRefreshToken to sEncodedRefreshToken
         Move (SFormat('token=%1&token_type_hint=refresh_token',;
-                sRefreshToken)) to sData
+                sEncodedRefreshToken)) to sData
         
         //Adding the headers
         Send ClearHeaders        
