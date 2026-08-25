@@ -163,7 +163,7 @@ Class cSSORequestSender is a cHttpTransfer
             Else If (sOptTokenTypeHint = "RefreshToken") ;
                 Move C_SSO_TOKEN_TYPE_REFRESH to sOptTokenTypeHint
 
-            Move (UriEncodeComponent(sOptTokenTypeHint)) to sEncodedTokenTypeHint
+            Get UriEncodeComponent sOptTokenTypeHint to sEncodedTokenTypeHint
             Move (sData + "&token_type_hint=" + sEncodedTokenTypeHint) to sData
         End
                      
