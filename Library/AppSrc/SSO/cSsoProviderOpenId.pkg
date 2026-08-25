@@ -245,7 +245,7 @@ Class cSsoProviderOpenId is a cSsoProvider
 
     { Visibility=Private }
     Procedure SendSsoLoginRequest String sClientID String sCallBackUrl String sState String sPrompt
-        String sEndpoint sScope sCodeChallenge sCodeChallengeMethod sEncryptedCodeVerifier sCodeChallengeParam sHost sPath
+        String sEndpoint sScope sEncodedScope sCodeChallenge sCodeChallengeMethod sEncryptedCodeVerifier sCodeChallengeParam sHost sPath
         Boolean bPublic bRelative bForceCodeChallenge
         Handle hoRequestSender
         
@@ -264,7 +264,10 @@ Class cSsoProviderOpenId is a cSsoProvider
         End
         
         Get psScopeParam to sScope
-        
+        // Scope is space-delimited, so it needs encoding before it goes in the query string,
+        // otherwise the URL carries literal spaces and every client re-encodes its own way
+        Get UriEncodeComponent sScope to sEncodedScope
+
         If (bPublic or bForceCodeChallenge) Begin
             Get EncryptedCodeVerifier of ghoSso C_SSO_CODE_VERIFIER_METHOD_S256 (&sCodeChallenge) (&sCodeChallengeMethod) to sEncryptedCodeVerifier
             Move (SFormat("&code_challenge=%1&code_challenge_method=%2", sCodeChallenge, sCodeChallengeMethod)) to sCodeChallengeParam
@@ -279,7 +282,7 @@ Class cSsoProviderOpenId is a cSsoProvider
         
         Get g_Base64UrlEncodeStr sState to sState
         Move (SFormat(sEndpoint + '?client_id=%1&redirect_uri=%2&state=%3&response_type=code&scope=%4&nonce=xyz%5%6' ,;
-            sClientID, sCallBackUrl, sState, sScope, sPrompt, sCodeChallengeParam)) to sEndpoint
+            sClientID, sCallBackUrl, sState, sEncodedScope, sPrompt, sCodeChallengeParam)) to sEndpoint
             
         Send NavigateToPage of ghoWebApp sEndpoint btCurrentWindow
     End_Procedure
